@@ -7,11 +7,10 @@ use crossterm::{
     cursor,
     event::{
         DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-        Event as CrosstermEvent, EventStream, KeyEvent, KeyEventKind, MouseEvent,
+        KeyEvent, MouseEvent,
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
 use status::TuiStatus;
@@ -121,7 +120,6 @@ impl Tui {
         tick_rate: f64,
         frame_rate: f64,
     ) {
-        let mut event_stream = EventStream::new();
         let mut tick_interval = interval(Duration::from_secs_f64(1.0 / tick_rate));
         let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
@@ -139,21 +137,6 @@ impl Tui {
                 }
                 _ = tick_interval.tick() => Event::Tick,
                 _ = render_interval.tick() => Event::Render,
-                crossterm_event = event_stream.next().fuse() => {
-                    match crossterm_event {
-                        Some(Ok(event)) => match event {
-                            CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => Event::Key(key),
-                            CrosstermEvent::Mouse(mouse) => Event::Mouse(mouse),
-                            CrosstermEvent::Resize(x, y) => Event::Resize(x, y),
-                            CrosstermEvent::FocusLost => Event::FocusLost,
-                            CrosstermEvent::FocusGained => Event::FocusGained,
-                            CrosstermEvent::Paste(s) => Event::Paste(s),
-                            _ => continue, // ignore other events
-                        }
-                        Some(Err(_)) => Event::Error,
-                        None => break, // the event stream has stopped and will not produce any more events
-                    }
-                },
             };
 
             if event_tx.send(event).is_err() {
