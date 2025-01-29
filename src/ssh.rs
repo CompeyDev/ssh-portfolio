@@ -119,7 +119,7 @@ impl Handler for SshSession {
 
         Err(eyre!("Failed to initialize App for session"))
     }
-    #[instrument(skip(self, _session), level = "trace")]
+    #[instrument(skip(self, session), level = "trace")]
     async fn pty_request(
         &mut self,
         channel_id: ChannelId,
@@ -129,10 +129,16 @@ impl Handler for SshSession {
         pix_width: u32,
         pix_height: u32,
         modes: &[(Pty, u32)],
-        _session: &mut Session,
+        session: &mut Session,
     ) -> Result<(), Self::Error> {
-        tracing::info!("Received pty request from channel {channel_id}");
+        tracing::info!("Received pty request from channel {channel_id}; terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
+        
+        if !term.contains("xterm") {
+            session.channel_failure(channel_id)?;
+            return Err(eyre!("Unsupported terminal type: {term}"));
+        }
+
         Ok(())
     }
 
