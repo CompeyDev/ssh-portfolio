@@ -1,4 +1,4 @@
-#![allow(dead_code)] // Remove this once you start using the code
+#![allow(dead_code)] // TODO: Remove this once you start using the code
 
 use std::{sync::Arc, time::Duration};
 
@@ -14,10 +14,11 @@ use crossterm::{
 use futures::{FutureExt, StreamExt};
 use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
+use status::TuiStatus;
 use tokio::{
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
-        Mutex,
+        Mutex, RwLock,
     },
     task::JoinHandle,
     time::interval,
@@ -26,6 +27,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 use crate::ssh::TermWriter;
+
+pub(crate) mod status;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
@@ -50,6 +53,8 @@ pub struct Tui {
     pub cancellation_token: CancellationToken,
     pub event_rx: UnboundedReceiver<Event>,
     pub event_tx: UnboundedSender<Event>,
+    pub resume_tx: Option<UnboundedSender<()>>,
+    pub status: Arc<RwLock<TuiStatus>>,
     pub frame_rate: f64,
     pub tick_rate: f64,
     pub mouse: bool,
@@ -65,6 +70,8 @@ impl Tui {
             cancellation_token: CancellationToken::new(),
             event_rx,
             event_tx,
+            resume_tx: Option::None,
+            status: Arc::new(RwLock::new(TuiStatus::Active)),
             frame_rate: 60.0,
             tick_rate: 4.0,
             mouse: false,
@@ -96,6 +103,7 @@ impl Tui {
         self.cancel(); // Cancel any existing task
         self.cancellation_token = CancellationToken::new();
         let event_loop = Self::event_loop(
+            self.status.clone(),
             self.event_tx.clone(),
             self.cancellation_token.clone(),
             self.tick_rate,
@@ -107,6 +115,7 @@ impl Tui {
     }
 
     async fn event_loop(
+        status: Arc<RwLock<TuiStatus>>,
         event_tx: UnboundedSender<Event>,
         cancellation_token: CancellationToken,
         tick_rate: f64,
@@ -120,27 +129,33 @@ impl Tui {
         event_tx
             .send(Event::Init)
             .expect("failed to send init event");
+
+        let suspension_status = Arc::clone(&status);
         loop {
+            let _guard = suspension_status.read().await;
             let event = tokio::select! {
                 _ = cancellation_token.cancelled() => {
                     break;
                 }
                 _ = tick_interval.tick() => Event::Tick,
                 _ = render_interval.tick() => Event::Render,
-                crossterm_event = event_stream.next().fuse() => match crossterm_event {
-                    Some(Ok(event)) => match event {
-                        CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => Event::Key(key),
-                        CrosstermEvent::Mouse(mouse) => Event::Mouse(mouse),
-                        CrosstermEvent::Resize(x, y) => Event::Resize(x, y),
-                        CrosstermEvent::FocusLost => Event::FocusLost,
-                        CrosstermEvent::FocusGained => Event::FocusGained,
-                        CrosstermEvent::Paste(s) => Event::Paste(s),
-                        _ => continue, // ignore other events
+                crossterm_event = event_stream.next().fuse() => {
+                    match crossterm_event {
+                        Some(Ok(event)) => match event {
+                            CrosstermEvent::Key(key) if key.kind == KeyEventKind::Press => Event::Key(key),
+                            CrosstermEvent::Mouse(mouse) => Event::Mouse(mouse),
+                            CrosstermEvent::Resize(x, y) => Event::Resize(x, y),
+                            CrosstermEvent::FocusLost => Event::FocusLost,
+                            CrosstermEvent::FocusGained => Event::FocusGained,
+                            CrosstermEvent::Paste(s) => Event::Paste(s),
+                            _ => continue, // ignore other events
+                        }
+                        Some(Err(_)) => Event::Error,
+                        None => break, // the event stream has stopped and will not produce any more events
                     }
-                    Some(Err(_)) => Event::Error,
-                    None => break, // the event stream has stopped and will not produce any more events
                 },
             };
+
             if event_tx.send(event).is_err() {
                 // the receiver has been dropped, so there's no point in continuing the loop
                 break;
@@ -180,6 +195,7 @@ impl Tui {
         }
 
         drop(term);
+
         self.start();
         Ok(())
     }
@@ -209,36 +225,38 @@ impl Tui {
         self.cancellation_token.cancel();
     }
 
-    pub fn suspend(&mut self) -> Result<()> {
-        self.exit()?;
-        #[cfg(not(windows))]
-        signal_hook::low_level::raise(signal_hook::consts::signal::SIGTSTP)?;
-        Ok(())
-    }
+    pub async fn suspend(&mut self) -> Result<Arc<CancellationToken>> {
+        // Exit the current Tui
+        tokio::task::block_in_place(|| self.exit())?;
 
-    pub fn resume(&mut self) -> Result<()> {
-        self.enter()?;
-        Ok(())
+        // Update the status and initialize a cancellation token
+        let token = Arc::new(CancellationToken::new());
+        let suspension = Arc::new(Mutex::new(()));
+        *self.status.write().await = TuiStatus::Suspended(Arc::clone(&suspension));
+
+        // Spawn a task holding on the lock until a notification interrupts it
+        let status = Arc::clone(&self.status);
+        let lock_release = Arc::clone(&token);
+        tokio::task::spawn(async move {
+            tokio::select! {
+                _ = lock_release.cancelled() => {
+                    // Lock was released, update the status
+                    *status.write().await = TuiStatus::Active;
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(u64::MAX)) => {
+                    // Hold on to the lock until notified
+                    let _ = suspension.lock().await;
+                }
+            }
+        });
+
+        Ok(token)
     }
 
     pub async fn next_event(&mut self) -> Option<Event> {
         self.event_rx.recv().await
     }
 }
-
-// impl Deref for Tui {
-//     type Target = ratatui::Terminal<Backend<TermWriter>>;
-
-//     fn deref(&self) -> &Self::Target {
-//         self.terminal.as_ref()
-//     }
-// }
-
-// impl DerefMut for Tui {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         self.terminal.get_mut().unwrap()
-//     }
-// }
 
 impl Drop for Tui {
     fn drop(&mut self) {

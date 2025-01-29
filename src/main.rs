@@ -14,6 +14,7 @@ mod errors;
 mod logging;
 mod ssh;
 mod tui;
+mod keycode;
 
 const SOCKET_ADDR: LazyLock<SocketAddr> = LazyLock::new(|| SocketAddr::from(([127, 0, 0, 1], 2222)));
 pub static SSH_CONFIG: OnceLock<Arc<Config>> = OnceLock::new();

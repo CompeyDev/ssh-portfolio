@@ -1,15 +1,22 @@
 use std::{io::Write, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
+use color_eyre::eyre::eyre;
 use ratatui::prelude::CrosstermBackend;
 use russh::{
     server::{Auth, Handle, Handler, Msg, Server, Session},
-    Channel, ChannelId, CryptoVec, Pty,
+    Channel, ChannelId, CryptoVec, Pty, 
 };
-use tokio::{runtime::Handle as TokioHandle, sync::Mutex};
+use tokio::{
+    runtime::Handle as TokioHandle,
+    sync::{mpsc, Mutex, RwLock},
+};
 use tracing::instrument;
 
-use crate::{app::App, tui::Terminal};
+use crate::{
+    app::App,
+    tui::{Terminal, Tui},
+};
 
 #[derive(Debug)]
 pub struct TermWriter {
@@ -27,6 +34,19 @@ impl TermWriter {
             inner: CryptoVec::new(),
         }
     }
+
+    fn flush_inner(&mut self) -> std::io::Result<()> {
+        let handle = TokioHandle::current();
+        handle.block_on(async move {
+            self.session
+                .data(self.channel.id(), self.inner.clone())
+                .await
+                .map_err(|err| {
+                    std::io::Error::other(String::from_iter(err.iter().map(|item| *item as char)))
+                })
+                .and_then(|()| Ok(self.inner.clear()))
+        })
+    }
 }
 
 impl Write for TermWriter {
@@ -38,32 +58,29 @@ impl Write for TermWriter {
 
     #[instrument(skip(self), level = "trace")]
     fn flush(&mut self) -> std::io::Result<()> {
-        let handle = TokioHandle::current();
-        handle.block_on(async move {
-            self.session
-                .data(self.channel.id(), self.inner.clone())
-                .await
-                .map_err(|err| {
-                    std::io::Error::other(String::from_iter(err.iter().map(|item| *item as char)))
-                })?;
-
-            self.inner.clear();
-            Ok(())
-        })
+        tokio::task::block_in_place(|| self.flush_inner())
     }
 }
 
-pub struct SshSession(Option<Arc<Mutex<App>>>);
+pub struct SshSession {
+    app: Option<Arc<Mutex<App>>>,
+    ssh_tx: mpsc::UnboundedSender<Vec<u8>>,
+    tui: Arc<RwLock<Option<Tui>>>,
+}
 
 unsafe impl Send for SshSession {}
 
 impl SshSession {
     pub fn new() -> Self {
-        Self(
-            App::new(10f64, 60f64)
+        let (ssh_tx, ssh_rx) = mpsc::unbounded_channel();
+
+        Self {
+            app: App::new(10f64, 60f64, ssh_rx)
                 .ok()
                 .map(|app| Arc::new(Mutex::new(app))),
-        )
+            tui: Arc::new(RwLock::new(None)),
+            ssh_tx,
+        }
     }
 }
 
@@ -82,23 +99,26 @@ impl Handler for SshSession {
         channel: Channel<Msg>,
         session: &mut Session,
     ) -> Result<bool, Self::Error> {
-        if let Some(app) = &self.0 {
+        if let Some(app) = &self.app {
+            let session_handle = session.handle();
+            let channel_id = channel.id();
+
             let inner_app = Arc::clone(app);
             let term = Terminal::new(CrosstermBackend::new(TermWriter::new(session, channel)))?;
             let writer = Arc::new(Mutex::new(term));
-            
+            let tui = Arc::clone(&self.tui);
+
             tokio::task::spawn(async move {
-                inner_app.lock_owned().await.run(writer).await.unwrap();
+                inner_app.lock_owned().await.run(writer, tui).await.unwrap();
+                session_handle.close(channel_id).await.unwrap();
+                session_handle.exit_status_request(channel_id, 0).await.unwrap();
             });
 
             return Ok(true);
         }
 
-        return Err(color_eyre::eyre::eyre!(
-            "Failed to initialize App for session"
-        ));
+        Err(eyre!("Failed to initialize App for session"))
     }
-
     #[instrument(skip(self, _session), level = "trace")]
     async fn pty_request(
         &mut self,
@@ -111,9 +131,22 @@ impl Handler for SshSession {
         modes: &[(Pty, u32)],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        tracing::info!("received pty request from channel {channel_id}");
+        tracing::info!("Received pty request from channel {channel_id}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
         Ok(())
+    }
+
+    #[instrument(skip(self, _session), level = "trace")]
+    async fn data(
+        &mut self,
+        _channel: ChannelId,
+        data: &[u8],
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
+        self.ssh_tx
+            .send(data.to_vec())
+            .map_err(|_| eyre!("Failed to send event keystroke data"))
     }
 }
 
@@ -127,7 +160,6 @@ impl Server for SshServer {
     #[instrument(skip(self))]
     fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
         let session = SshSession::new();
-        // self.0.push((peer_addr.unwrap(), session));
         session
     }
 }
