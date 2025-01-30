@@ -31,7 +31,6 @@ async fn main() -> Result<()> {
         conf.methods = MethodSet::NONE;
         conf.keys = vec![
             PrivateKey::from_openssh(include_bytes!("../rsa.pem")).unwrap(),
-            // PrivateKey::from_openssh(include_bytes!("../ecdsa.pem")).unwrap(),
             PrivateKey::from_openssh(include_bytes!("../ed25519.pem")).unwrap()
         ];
         Arc::new(conf)

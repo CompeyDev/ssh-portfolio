@@ -1,7 +1,7 @@
 use std::{io::Write, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
-use color_eyre::eyre::eyre;
+use color_eyre::eyre::{self, eyre};
 use ratatui::prelude::CrosstermBackend;
 use russh::{
     server::{Auth, Handle, Handler, Msg, Server, Session},
@@ -27,7 +27,9 @@ pub struct TermWriter {
 }
 
 impl TermWriter {
+    #[instrument(skip(session, channel), level = "trace", fields(channel_id = %channel.id()))]
     fn new(session: &mut Session, channel: Channel<Msg>) -> Self {
+        tracing::trace!("Acquiring new SSH writer");
         Self {
             session: session.handle(),
             channel,
@@ -52,12 +54,14 @@ impl TermWriter {
 impl Write for TermWriter {
     #[instrument(skip(self, buf), level = "debug")]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
         self.inner.extend(buf);
         Ok(buf.len())
     }
 
     #[instrument(skip(self), level = "trace")]
     fn flush(&mut self) -> std::io::Result<()> {
+        tracing::trace!("Flushing SSH terminal writer buffer");
         tokio::task::block_in_place(|| self.flush_inner())
     }
 }
@@ -82,18 +86,24 @@ impl SshSession {
             ssh_tx,
         }
     }
+
+    async fn run_app(app: Arc<Mutex<App>>, writer: Arc<Mutex<Terminal>>, tui: Arc<RwLock<Option<Tui>>>, session: &Handle, channel_id: ChannelId) -> eyre::Result<()> {
+        app.lock_owned().await.run(writer, tui).await?;
+        session.close(channel_id).await.map_err(|_| eyre!("failed to close session"))?;
+        session.exit_status_request(channel_id, 0).await.map_err(|_| eyre!("failed to send session exit status"))
+    }
 }
 
 #[async_trait]
 impl Handler for SshSession {
-    type Error = color_eyre::eyre::Error;
+    type Error = eyre::Error;
 
     #[instrument(skip(self), span = "user_login", fields(method = "none"))]
     async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
         Ok(Auth::Accept)
     }
 
-    #[instrument(skip(self), span = "channel_establish", level = "trace")]
+    #[instrument(skip(self, session, channel), span = "channel_establish", fields(channel_id = %channel.id()))]
     async fn channel_open_session(
         &mut self,
         channel: Channel<Msg>,
@@ -108,10 +118,16 @@ impl Handler for SshSession {
             let writer = Arc::new(Mutex::new(term));
             let tui = Arc::clone(&self.tui);
 
+            tracing::info!("Serving app to open session");
             tokio::task::spawn(async move {
-                inner_app.lock_owned().await.run(writer, tui).await.unwrap();
-                session_handle.close(channel_id).await.unwrap();
-                session_handle.exit_status_request(channel_id, 0).await.unwrap();
+                let res = Self::run_app(inner_app, writer, tui, &session_handle, channel_id).await;
+                match res {
+                    Ok(()) => tracing::info!("session exited"),
+                    Err(err) => {
+                        tracing::error!("Session exited with error: {err}");
+                        let _ = session_handle.channel_failure(channel_id).await;
+                    },
+                }
             });
 
             return Ok(true);
@@ -119,7 +135,7 @@ impl Handler for SshSession {
 
         Err(eyre!("Failed to initialize App for session"))
     }
-    #[instrument(skip(self, session), level = "trace")]
+    #[instrument(skip_all, fields(channel_id = %channel_id))]
     async fn pty_request(
         &mut self,
         channel_id: ChannelId,
@@ -128,10 +144,10 @@ impl Handler for SshSession {
         row_height: u32,
         pix_width: u32,
         pix_height: u32,
-        modes: &[(Pty, u32)],
+        _modes: &[(Pty, u32)],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        tracing::info!("Received pty request from channel {channel_id}; terminal: {term}");
+        tracing::info!("PTY requested by terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
         
         if !term.contains("xterm") {
