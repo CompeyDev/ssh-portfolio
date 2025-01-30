@@ -5,7 +5,7 @@ use color_eyre::eyre::{self, eyre};
 use ratatui::prelude::CrosstermBackend;
 use russh::{
     server::{Auth, Handle, Handler, Msg, Server, Session},
-    Channel, ChannelId, CryptoVec, Pty, 
+    Channel, ChannelId, CryptoVec, Pty,
 };
 use tokio::{
     runtime::Handle as TokioHandle,
@@ -16,6 +16,7 @@ use tracing::instrument;
 use crate::{
     app::App,
     tui::{Terminal, Tui},
+    OPTIONS,
 };
 
 #[derive(Debug)]
@@ -54,7 +55,10 @@ impl TermWriter {
 impl Write for TermWriter {
     #[instrument(skip(self, buf), level = "debug")]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
+        tracing::trace!(
+            "Writing {} bytes into SSH terminal writer buffer",
+            buf.len()
+        );
         self.inner.extend(buf);
         Ok(buf.len())
     }
@@ -72,14 +76,12 @@ pub struct SshSession {
     tui: Arc<RwLock<Option<Tui>>>,
 }
 
-unsafe impl Send for SshSession {}
-
 impl SshSession {
     pub fn new() -> Self {
         let (ssh_tx, ssh_rx) = mpsc::unbounded_channel();
 
         Self {
-            app: App::new(10f64, 60f64, ssh_rx)
+            app: App::new(OPTIONS.tick_rate, OPTIONS.frame_rate, ssh_rx)
                 .ok()
                 .map(|app| Arc::new(Mutex::new(app))),
             tui: Arc::new(RwLock::new(None)),
@@ -87,10 +89,22 @@ impl SshSession {
         }
     }
 
-    async fn run_app(app: Arc<Mutex<App>>, writer: Arc<Mutex<Terminal>>, tui: Arc<RwLock<Option<Tui>>>, session: &Handle, channel_id: ChannelId) -> eyre::Result<()> {
+    async fn run_app(
+        app: Arc<Mutex<App>>,
+        writer: Arc<Mutex<Terminal>>,
+        tui: Arc<RwLock<Option<Tui>>>,
+        session: &Handle,
+        channel_id: ChannelId,
+    ) -> eyre::Result<()> {
         app.lock_owned().await.run(writer, tui).await?;
-        session.close(channel_id).await.map_err(|_| eyre!("failed to close session"))?;
-        session.exit_status_request(channel_id, 0).await.map_err(|_| eyre!("failed to send session exit status"))
+        session
+            .close(channel_id)
+            .await
+            .map_err(|_| eyre!("failed to close session"))?;
+        session
+            .exit_status_request(channel_id, 0)
+            .await
+            .map_err(|_| eyre!("failed to send session exit status"))
     }
 }
 
@@ -126,7 +140,7 @@ impl Handler for SshSession {
                     Err(err) => {
                         tracing::error!("Session exited with error: {err}");
                         let _ = session_handle.channel_failure(channel_id).await;
-                    },
+                    }
                 }
             });
 
@@ -149,7 +163,7 @@ impl Handler for SshSession {
     ) -> Result<(), Self::Error> {
         tracing::info!("PTY requested by terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
-        
+
         if !term.contains("xterm") {
             session.channel_failure(channel_id)?;
             return Err(eyre!("Unsupported terminal type: {term}"));
