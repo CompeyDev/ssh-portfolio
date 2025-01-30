@@ -243,6 +243,6 @@ impl Tui {
 
 impl Drop for Tui {
     fn drop(&mut self) {
-        self.exit().unwrap();
+        let _ = self.exit().inspect_err(|err| error!("Failed to exit Tui: {err}"));
     }
 }
