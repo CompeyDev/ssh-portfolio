@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         if let Ok(ref key) = key_res {
             let path = out_dir.join(format!("{}.pem", key.algorithm().as_str()));
             if path.exists() {
-                println!("cargo:warning=Skipping existing host key: {:?}", path);
+                println!("cargo:warning=Skipping existing host key: {:?}", path.file_stem());
                 continue;
             }
             
