@@ -110,6 +110,7 @@ impl KeyCodeExt for KeyCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_keycode_from_control_chars() {
