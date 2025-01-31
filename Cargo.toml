@@ -45,4 +45,5 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter", "serde"] }
 
 [build-dependencies]
 anyhow = "1.0.90"
+ssh-key = { version = "0.6.7", features = ["getrandom", "crypto"] }
 vergen-gix = { version = "1.0.2", features = ["build", "cargo"] }

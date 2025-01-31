@@ -24,8 +24,9 @@ mod ssh;
 mod tui;
 
 const SSH_KEYS: &[&[u8]] = &[
-    include_bytes!("../rsa.pem"),
-    include_bytes!("../ed25519.pem"),
+    include_bytes!(concat!(env!("OUT_DIR"), "/ssh-rsa.pem")),
+    include_bytes!(concat!(env!("OUT_DIR"), "/ecdsa-sha2-nistp256.pem")),
+    include_bytes!(concat!(env!("OUT_DIR"), "/ssh-ed25519.pem")),
 ];
 lazy_static! {
     pub(crate) static ref OPTIONS: Cli = Cli::parse();
@@ -36,6 +37,7 @@ lazy_static! {
 async fn main() -> Result<()> {
     crate::errors::init()?;
     crate::logging::init()?;
+    let _ = *OPTIONS; // force clap to run by evaluating it
 
     let config = ssh_config();
     tracing::info!("Attempting to listen on {}", *SOCKET_ADDR);

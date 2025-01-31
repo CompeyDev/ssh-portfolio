@@ -3443,6 +3443,7 @@ dependencies = [
  "serde",
  "serde_json",
  "signal-hook",
+ "ssh-key",
  "strip-ansi-escapes",
  "strum",
  "tokio",
