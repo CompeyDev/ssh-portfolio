@@ -24,13 +24,28 @@ mod ssh;
 mod tui;
 
 const SSH_KEYS: &[&[u8]] = &[
-    include_bytes!(concat!(env!("OUT_DIR"), "/ssh-rsa.pem")),
-    include_bytes!(concat!(env!("OUT_DIR"), "/ecdsa-sha2-nistp256.pem")),
-    include_bytes!(concat!(env!("OUT_DIR"), "/ssh-ed25519.pem")),
+    include_bytes!(concat!(env!("OUT_DIR"), "/rsa.pem")),
+    include_bytes!(concat!(env!("OUT_DIR"), "/ecdsa.pem")),
+    include_bytes!(concat!(env!("OUT_DIR"), "/ed25519.pem")),
 ];
 lazy_static! {
     pub(crate) static ref OPTIONS: Cli = Cli::parse();
-    pub(crate) static ref SOCKET_ADDR: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 2222));
+    pub(crate) static ref SOCKET_ADDR: Option<SocketAddr> = Some(SocketAddr::from((
+        // Convert the hostname IP to a fixed size array of [u8; 4]
+        TryInto::<[u8; 4]>::try_into(
+            OPTIONS
+                .host
+                .splitn(4, ".")
+                .map(|octet_str| u8::from_str_radix(octet_str, 10)
+                    .map_err(|_| eyre!("Octet component out of range (expected u8)")))
+                .collect::<Result<Vec<u8>>>()
+                .ok()?
+        )
+        .ok()?,
+
+        // The port to listen on
+        OPTIONS.port
+    )));
 }
 
 #[tokio::main]
@@ -39,10 +54,12 @@ async fn main() -> Result<()> {
     crate::logging::init()?;
     let _ = *OPTIONS; // force clap to run by evaluating it
 
+    let socket_addr = SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let config = ssh_config();
-    tracing::info!("Attempting to listen on {}", *SOCKET_ADDR);
+
+    tracing::info!("Attempting to listen on {}", socket_addr);
     SshServer::default()
-        .run_on_socket(Arc::new(config), &TcpListener::bind(*SOCKET_ADDR).await?)
+        .run_on_socket(Arc::new(config), &TcpListener::bind(socket_addr).await?)
         .await
         .map_err(|err| eyre!(err))
 }
@@ -55,7 +72,7 @@ fn ssh_config() -> Config {
         .iter()
         .filter_map(|pem| PrivateKey::from_openssh(pem).ok())
         .collect();
-    
+
     tracing::trace!("SSH config: {:#?}", conf);
     conf
 }

@@ -3434,6 +3434,7 @@ dependencies = [
  "directories",
  "futures",
  "human-panic",
+ "indoc",
  "json5",
  "lazy_static",
  "libc",

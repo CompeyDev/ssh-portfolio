@@ -1,4 +1,5 @@
 use clap::Parser;
+use indoc::formatdoc;
 
 use crate::config::{get_config_dir, get_data_dir};
 
@@ -12,6 +13,13 @@ pub struct Cli {
     /// Frame rate, i.e. number of frames per second
     #[arg(short, long, value_name = "FLOAT", default_value_t = 60.0)]
     pub frame_rate: f64,
+
+    /// The host address to start the SSH server on
+    #[arg(short = 'H', long, value_name = "ADDRESS", default_value_t = String::from("127.0.0.1"))]
+    pub host: String,
+    /// The port to start the SSH server on
+    #[arg(short, long, value_name = "PORT", default_value_t = 2222)]
+    pub port: u16,
 }
 
 const VERSION_MESSAGE: &str = concat!(
@@ -30,13 +38,12 @@ pub fn version() -> String {
     let config_dir_path = get_config_dir().display().to_string();
     let data_dir_path = get_data_dir().display().to_string();
 
-    format!(
-        "\
-{VERSION_MESSAGE}
+    formatdoc! {"
+        {VERSION_MESSAGE}
 
-Authors: {author}
+        Authors: {author}
 
-Config directory: {config_dir_path}
-Data directory: {data_dir_path}"
-    )
+        Config directory: {config_dir_path}
+        Data directory: {data_dir_path}
+    "}
 }
