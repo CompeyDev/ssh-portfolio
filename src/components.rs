@@ -8,8 +8,17 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{action::Action, config::Config, tui::Event};
 
-pub mod fps;
-pub mod home;
+//
+// Component re-exports
+//
+
+mod tabs;
+mod content;
+mod cat;
+
+pub use tabs::*;
+pub use content::*;
+pub use cat::*;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 ///

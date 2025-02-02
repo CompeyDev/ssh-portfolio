@@ -2,20 +2,19 @@ use std::{io::Write, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use color_eyre::eyre::{self, eyre};
-use ratatui::prelude::CrosstermBackend;
 use russh::{
     server::{Auth, Handle, Handler, Msg, Server, Session},
     Channel, ChannelId, CryptoVec, Pty,
 };
 use tokio::{
     runtime::Handle as TokioHandle,
-    sync::{mpsc, Mutex, RwLock},
+    sync::{mpsc, oneshot, Mutex, RwLock},
 };
 use tracing::instrument;
 
 use crate::{
     app::App,
-    tui::{Terminal, Tui},
+    tui::{backend::SshBackend, Terminal, Tui},
     OPTIONS,
 };
 
@@ -29,10 +28,10 @@ pub struct TermWriter {
 
 impl TermWriter {
     #[instrument(skip(session, channel), level = "trace", fields(channel_id = %channel.id()))]
-    fn new(session: &mut Session, channel: Channel<Msg>) -> Self {
+    fn new(session: Handle, channel: Channel<Msg>) -> Self {
         tracing::trace!("Acquiring new SSH writer");
         Self {
-            session: session.handle(),
+            session,
             channel,
             inner: CryptoVec::new(),
         }
@@ -72,20 +71,33 @@ impl Write for TermWriter {
 
 pub struct SshSession {
     app: Option<Arc<Mutex<App>>>,
-    ssh_tx: mpsc::UnboundedSender<Vec<u8>>,
+    keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
+    resize_tx: mpsc::UnboundedSender<(u16, u16)>,
+    init_dims_tx: Option<oneshot::Sender<((u16, u16), (u16, u16))>>,
+    init_dims_rx: Option<oneshot::Receiver<((u16, u16), (u16, u16))>>,
     tui: Arc<RwLock<Option<Tui>>>,
 }
 
 impl SshSession {
     pub fn new() -> Self {
-        let (ssh_tx, ssh_rx) = mpsc::unbounded_channel();
+        let (keystroke_tx, keystroke_rx) = mpsc::unbounded_channel();
+        let (resize_tx, resize_rx) = mpsc::unbounded_channel();
+        let (init_dims_tx, init_dims_rx) = oneshot::channel();
 
         Self {
-            app: App::new(OPTIONS.tick_rate, OPTIONS.frame_rate, ssh_rx)
-                .ok()
-                .map(|app| Arc::new(Mutex::new(app))),
+            app: App::new(
+                OPTIONS.tick_rate,
+                OPTIONS.frame_rate,
+                keystroke_rx,
+                resize_rx,
+            )
+            .ok()
+            .map(|app| Arc::new(Mutex::new(app))),
             tui: Arc::new(RwLock::new(None)),
-            ssh_tx,
+            keystroke_tx,
+            resize_tx,
+            init_dims_tx: Some(init_dims_tx),
+            init_dims_rx: Some(init_dims_rx), // Only an option so that I can take ownership of it
         }
     }
 
@@ -96,6 +108,12 @@ impl SshSession {
         session: &Handle,
         channel_id: ChannelId,
     ) -> eyre::Result<()> {
+        // let mut tui_inner = Tui::new(writer.clone())?;
+        // let mut app_tmp = app.lock().await;
+        // app_tmp.resize(&mut tui_inner, 169, 34)?;
+        // drop(app_tmp);
+        // tui.write().await.get_or_insert(tui_inner);
+
         app.lock_owned().await.run(writer, tui).await?;
         session
             .close(channel_id)
@@ -128,17 +146,31 @@ impl Handler for SshSession {
             let channel_id = channel.id();
 
             let inner_app = Arc::clone(app);
-            let term = Terminal::new(CrosstermBackend::new(TermWriter::new(session, channel)))?;
-            let writer = Arc::new(Mutex::new(term));
             let tui = Arc::clone(&self.tui);
+            let rx = self.init_dims_rx.take().unwrap();
 
             tracing::info!("Serving app to open session");
             tokio::task::spawn(async move {
-                let res = Self::run_app(inner_app, writer, tui, &session_handle, channel_id).await;
-                match res {
-                    Ok(()) => tracing::info!("session exited"),
+                let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = (|| async {
+                    let ((term_width, term_height), (pixel_width, pixel_height)) = rx.await?;
+                    let writer = Arc::new(Mutex::new(Terminal::new(SshBackend::new(
+                        TermWriter::new(session_handle.clone(), channel),
+                        term_width,
+                        term_height,
+                        pixel_width,
+                        pixel_height,
+                    ))?));
+
+                    Self::run_app(inner_app, writer, tui, &session_handle, channel_id).await?;
+                    Ok(())
+                })(
+                )
+                .await;
+
+                match result {
+                    Ok(()) => tracing::info!("Session exited successfully"),
                     Err(err) => {
-                        tracing::error!("Session exited with error: {err}");
+                        tracing::error!("Session errored: {err}");
                         let _ = session_handle.channel_failure(channel_id).await;
                     }
                 }
@@ -149,6 +181,7 @@ impl Handler for SshSession {
 
         Err(eyre!("Failed to initialize App for session"))
     }
+
     #[instrument(skip_all, fields(channel_id = %channel_id))]
     async fn pty_request(
         &mut self,
@@ -169,6 +202,18 @@ impl Handler for SshSession {
             return Err(eyre!("Unsupported terminal type: {term}"));
         }
 
+        let tx = self.init_dims_tx.take().unwrap();
+        if !tx.is_closed() {
+            // If we've not already initialized the terminal, send the initial dimensions
+            tracing::debug!("Sending initial pty dimensions");
+            tx.send((
+                (col_width as u16, row_height as u16),
+                (pix_width as u16, pix_height as u16),
+            ))
+            .map_err(|_| eyre!("Failed to send initial pty dimensions"))?;
+        }
+
+        session.channel_success(channel_id)?;
         Ok(())
     }
 
@@ -180,9 +225,27 @@ impl Handler for SshSession {
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
-        self.ssh_tx
+        self.keystroke_tx
             .send(data.to_vec())
             .map_err(|_| eyre!("Failed to send event keystroke data"))
+    }
+
+    async fn window_change_request(
+        &mut self,
+        _: ChannelId,
+        col_width: u32,
+        row_height: u32,
+        _: u32,
+        _: u32,
+        _: &mut Session,
+    ) -> Result<(), Self::Error> {
+        // TODO: actually make it resize properly
+        // That would involve first updating the Backend's size and then updating the rect via the event
+        self.resize_tx
+            .send((col_width as u16, row_height as u16))
+            .map_err(|_| eyre!("Failed to send pty size specifications"))?;
+
+        Ok(())
     }
 }
 

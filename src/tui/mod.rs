@@ -2,6 +2,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use backend::SshBackend;
 use color_eyre::Result;
 use crossterm::{
     cursor,
@@ -11,7 +12,6 @@ use crossterm::{
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::backend::CrosstermBackend as Backend;
 use serde::{Deserialize, Serialize};
 use status::TuiStatus;
 use tokio::{
@@ -25,9 +25,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::error;
 
-use crate::ssh::TermWriter;
-
 pub(crate) mod status;
+pub(crate) mod backend;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
@@ -45,7 +44,9 @@ pub enum Event {
     Resize(u16, u16),
 }
 
-pub type Terminal = ratatui::Terminal<Backend<TermWriter>>;
+pub type Terminal = ratatui::Terminal<SshBackend>;
+
+#[derive(Debug)]
 pub struct Tui {
     pub terminal: Arc<Mutex<Terminal>>,
     pub task: JoinHandle<()>,

@@ -1,8 +1,14 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::prelude::Rect;
+use ratatui::{
+    layout::{Constraint, Direction, Layout},
+    prelude::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 use serde::{Deserialize, Serialize};
 use tokio::{
     sync::{mpsc, Mutex, RwLock},
@@ -13,7 +19,7 @@ use tracing::{debug, info};
 
 use crate::{
     action::Action,
-    components::{fps::FpsCounter, home::Home, Component},
+    components::*,
     config::Config,
     keycode::KeyCodeExt,
     tui::{Event, Terminal, Tui},
@@ -23,14 +29,20 @@ pub struct App {
     config: Config,
     tick_rate: f64,
     frame_rate: f64,
-    components: Vec<Box<Arc<Mutex<dyn Component>>>>,
     should_quit: bool,
     should_suspend: bool,
     mode: Mode,
     last_tick_key_events: Vec<KeyEvent>,
     action_tx: mpsc::UnboundedSender<Action>,
     action_rx: mpsc::UnboundedReceiver<Action>,
-    ssh_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+
+    ssh_keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    ssh_resize_rx: mpsc::UnboundedReceiver<(u16, u16)>,
+
+    // TODO: Refactor into its own `Components` struct
+    tabs: Arc<Mutex<Tabs>>,
+    content: Arc<Mutex<Content>>,
+    cat: Arc<Mutex<Cat>>,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -43,16 +55,24 @@ impl App {
     pub fn new(
         tick_rate: f64,
         frame_rate: f64,
-        ssh_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        resize_rx: mpsc::UnboundedReceiver<(u16, u16)>,
     ) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
+
+        // Initialize components
+        let active_tab = Arc::new(AtomicUsize::new(0));
+        let tabs = Arc::new(Mutex::new(Tabs::new(
+            vec!["about", "projects", "blog"],
+            Arc::clone(&active_tab),
+        )));
+        let content = Arc::new(Mutex::new(Content::new(active_tab)));
+
+        let cat = Arc::new(Mutex::new(Cat::new()));
+
         Ok(Self {
             tick_rate,
             frame_rate,
-            components: vec![
-                Box::new(Arc::new(Mutex::new(Home::new()))),
-                Box::new(Arc::new(Mutex::new(FpsCounter::default()))),
-            ],
             should_quit: false,
             should_suspend: false,
             config: Config::new()?,
@@ -60,7 +80,13 @@ impl App {
             last_tick_key_events: Vec::new(),
             action_tx,
             action_rx,
-            ssh_rx,
+
+            ssh_keystroke_rx: keystroke_rx,
+            ssh_resize_rx: resize_rx,
+
+            tabs,
+            content,
+            cat,
         })
     }
 
@@ -72,7 +98,6 @@ impl App {
         let mut tui = tui.write().await;
         let mut tui = tui.get_or_insert(
             Tui::new(term)?
-                // .mouse(true) // uncomment this line to enable mouse support
                 .tick_rate(self.tick_rate)
                 .frame_rate(self.frame_rate),
         );
@@ -81,23 +106,33 @@ impl App {
         block_in_place(|| {
             tui.enter()?;
 
-            for component in self.components.iter_mut() {
-                component
-                    .try_lock()?
-                    .register_action_handler(self.action_tx.clone())?;
-            }
+            // Register action handlers
+            self.tabs
+                .try_lock()?
+                .register_action_handler(self.action_tx.clone())?;
+            self.content
+                .try_lock()?
+                .register_action_handler(self.action_tx.clone())?;
+            self.cat
+                .try_lock()?
+                .register_action_handler(self.action_tx.clone())?;
 
-            for component in self.components.iter_mut() {
-                component
-                    .try_lock()?
-                    .register_config_handler(self.config.clone())?;
-            }
+            // Register config handlers
+            self.tabs
+                .try_lock()?
+                .register_config_handler(self.config.clone())?;
+            self.content
+                .try_lock()?
+                .register_config_handler(self.config.clone())?;
+            self.cat
+                .try_lock()?
+                .register_config_handler(self.config.clone())?;
 
-            for component in self.components.iter_mut() {
-                component
-                    .try_lock()?
-                    .init(tui.terminal.try_lock()?.size()?)?;
-            }
+            // Initialize components
+            let size = tui.terminal.try_lock()?.size()?;
+            self.tabs.try_lock()?.init(size)?;
+            self.content.try_lock()?.init(size)?;
+            self.cat.try_lock()?.init(size)?;
 
             Ok::<_, eyre::Error>(())
         })?;
@@ -106,19 +141,17 @@ impl App {
         let mut resume_tx: Option<Arc<CancellationToken>> = None;
         loop {
             self.handle_events(&mut tui).await?;
-            // self.handle_actions(&mut tui)?;
             block_in_place(|| self.handle_actions(&mut tui))?;
             if self.should_suspend {
                 if let Some(ref tx) = resume_tx {
-                    tx.cancel(); 
+                    tx.cancel();
                     resume_tx = None;
                 } else {
                     resume_tx = Some(tui.suspend().await?);
-                    continue
+                    continue;
                 }
                 action_tx.send(Action::Resume)?;
                 action_tx.send(Action::ClearScreen)?;
-                // tui.mouse(true);
                 block_in_place(|| tui.enter())?;
             } else if self.should_quit {
                 block_in_place(|| tui.stop())?;
@@ -132,7 +165,6 @@ impl App {
     async fn handle_events(&mut self, tui: &mut Tui) -> Result<()> {
         tokio::select! {
             Some(event) = tui.next_event() => {
-                // Wait for next event and fire required actions for components
                 let action_tx = self.action_tx.clone();
                 match event {
                     Event::Quit => action_tx.send(Action::Quit)?,
@@ -143,21 +175,30 @@ impl App {
                     _ => {}
                 };
 
-                for component in self.components.iter_mut() {
-                    let mut component = component.try_lock()?;
-                    if let Some(action) = block_in_place(|| component.handle_events(Some(event.clone())))? {
-                        action_tx.send(action)?;
-                    }
+                // Handle events for each component
+                if let Some(action) = self.tabs.try_lock()?.handle_events(Some(event.clone()))? {
+                    action_tx.send(action)?;
+                }
+                if let Some(action) = self.content.try_lock()?.handle_events(Some(event.clone()))? {
+                    action_tx.send(action)?;
+                }
+                if let Some(action) = self.cat.try_lock()?.handle_events(Some(event.clone()))? {
+                    action_tx.send(action)?;
                 }
             }
-            Some(ssh_data) = self.ssh_rx.recv() => {
-                // Receive keystroke data from SSH connection
-                let key_event = KeyCode::from_xterm_seq(&ssh_data[..]).into_key_event();
+
+            Some(keystroke_data) = self.ssh_keystroke_rx.recv() => {
+                let key_event = KeyCode::from_xterm_seq(&keystroke_data[..]).into_key_event();
                 block_in_place(|| self.handle_key_event(key_event))?;
+            }
+
+            Some((width, height)) = self.ssh_resize_rx.recv() => {
+                self.action_tx.send(Action::Resize(width, height))?;
             }
         }
         Ok(())
     }
+
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
         let action_tx = self.action_tx.clone();
         let Some(keymap) = self.config.keybindings.get(&self.mode) else {
@@ -169,11 +210,7 @@ impl App {
                 action_tx.send(action.clone())?;
             }
             _ => {
-                // If the key was not handled as a single key action,
-                // then consider it for multi-key combinations
                 self.last_tick_key_events.push(key);
-
-                // Check for multi-key combinations
                 if let Some(action) = keymap.get(&self.last_tick_key_events) {
                     info!("Got action: {action:?}");
                     action_tx.send(action.clone())?;
@@ -196,35 +233,97 @@ impl App {
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
-                Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
+                Action::Resize(w, h) => self.resize(tui, w, h)?,
                 Action::Render => self.render(tui)?,
                 _ => {}
             }
 
-            for component in self.components.iter_mut() {
-                if let Some(action) = component.try_lock()?.update(action.clone())? {
-                    self.action_tx.send(action)?
-                };
+            // Update each component
+            if let Some(action) = self.tabs.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
+            if let Some(action) = self.content.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
+            if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
             }
         }
         Ok(())
     }
 
-    fn handle_resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
-        tui.terminal.try_lock()?.resize(Rect::new(0, 0, w, h))?;
-        self.render(tui)?;
-        Ok(())
+    pub fn resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
+        let mut term = tui.terminal.try_lock()?;
+        term.backend_mut().dims = (w, h);
+        term.resize(Rect::new(0, 0, w, h))?;
+        drop(term);
+
+        self.render(tui)
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        tui.terminal.try_lock()?.draw(|frame| {
-            for component in self.components.iter_mut() {
-                if let Err(err) = component.blocking_lock().draw(frame, frame.area()) {
-                    let _ = self
-                        .action_tx
-                        .send(Action::Error(format!("Failed to draw: {:?}", err)));
-                }
-            }
+        tui.terminal.try_lock()?.try_draw(|frame| {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+                .split(frame.area());
+
+            // Render the domain name text
+            let title = Paragraph::new(Line::from(Span::styled(
+                "devcomp.xyz ",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )));
+
+            frame.render_widget(
+                title,
+                Rect {
+                    x: chunks[0].x + 2,
+                    y: chunks[0].y + 2,
+                    width: 14,
+                    height: 1,
+                },
+            );
+
+            // Render the tabs
+            self.tabs
+                .try_lock()
+                .map_err(|err| std::io::Error::other(err))?
+                .draw(
+                    frame,
+                    Rect {
+                        x: chunks[0].x + 14,
+                        y: chunks[0].y + 1,
+                        width: chunks[0].width - 6,
+                        height: chunks[0].height,
+                    },
+                )
+                .map_err(|err| std::io::Error::other(err))?;
+
+            // Render the content
+            self.content
+                .try_lock()
+                .map_err(|err| std::io::Error::other(err))?
+                .draw(
+                    frame,
+                    Rect {
+                        x: chunks[1].x,
+                        y: chunks[1].y,
+                        width: chunks[0].width,
+                        height: frame.area().height - chunks[0].height,
+                    },
+                )
+                .map_err(|err| std::io::Error::other(err))?;
+
+            // Render the eepy cat :3
+            self.cat
+                .try_lock()
+                .map_err(|err| std::io::Error::other(err))?
+                .draw(frame, frame.area())
+                .map_err(|err| std::io::Error::other(err))?;
+
+            Ok::<_, std::io::Error>(())
         })?;
         Ok(())
     }

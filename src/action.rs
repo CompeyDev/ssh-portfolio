@@ -12,4 +12,8 @@ pub enum Action {
     ClearScreen,
     Error(String),
     Help,
+
+    // Tab management
+    NextTab,
+    PrevTab
 }
