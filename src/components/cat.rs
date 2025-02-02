@@ -1,9 +1,17 @@
 use color_eyre::Result;
+use indoc::indoc;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
 use crate::{action::Action, config::Config};
+
+const CAT_ASCII_ART: &str = indoc! {r#"
+      |\__/,|   (`\
+      |_ _  |.--.) )
+      ( T   )     /
+     (((^_(((/(((_>
+"#};
 
 #[derive(Default)]
 pub struct Cat {
@@ -38,13 +46,12 @@ impl Component for Cat {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
-        const CART: &str = r#"  |\__/,|   (`\
-  |_ _  |.--.) )
-  ( T   )     /
- (((^_(((/(((_>"#;
-
         frame.render_widget(
-            Paragraph::new(CART).style(Style::default().fg(Color::Magenta).add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD)),
+            Paragraph::new(CAT_ASCII_ART).style(
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD),
+            ),
             Rect {
                 x: area.width - 17,
                 y: area.height - 4,
