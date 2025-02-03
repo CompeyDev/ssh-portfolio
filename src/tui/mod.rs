@@ -15,18 +15,19 @@ use crossterm::{
 use serde::{Deserialize, Serialize};
 use status::TuiStatus;
 use tokio::{
+    runtime::Handle,
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         Mutex, RwLock,
     },
-    task::JoinHandle,
-    time::interval,
+    task::{block_in_place, JoinHandle},
+    time::{interval, sleep, timeout},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::error;
 
-pub(crate) mod status;
 pub(crate) mod backend;
+pub(crate) mod status;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
@@ -148,20 +149,30 @@ impl Tui {
         cancellation_token.cancel();
     }
 
-    pub fn stop(&self) -> Result<()> {
-        self.cancel();
-        let mut counter = 0;
+    async fn await_shutdown(&self) {
         while !self.task.is_finished() {
-            std::thread::sleep(Duration::from_millis(1));
-            counter += 1;
-            if counter > 50 {
+            sleep(Duration::from_millis(1)).await;
+        }
+    }
+
+    pub async fn stop(&self) -> Result<()> {
+        self.cancel();
+        
+        let attempt_timeout = Duration::from_millis(50);
+        let abort_shutdown = async {
+            while !self.task.is_finished() {
                 self.task.abort();
             }
-            if counter > 100 {
-                error!("Failed to abort task in 100 milliseconds for unknown reason");
-                break;
-            }
+        };
+
+        if let Err(_) = timeout(attempt_timeout, self.await_shutdown()).await {
+            timeout(attempt_timeout, abort_shutdown)
+                .await
+                .inspect_err(|_| {
+                    error!("Failed to abort task in 100 milliseconds for unknown reason")
+                })?;
         }
+
         Ok(())
     }
 
@@ -184,8 +195,8 @@ impl Tui {
         Ok(())
     }
 
-    pub fn exit(&mut self) -> Result<()> {
-        self.stop()?;
+    pub async fn exit(&mut self) -> Result<()> {
+        self.stop().await?;
         // TODO: enable raw mode for pty
         if true || crossterm::terminal::is_raw_mode_enabled()? {
             let mut term = self.terminal.try_lock()?;
@@ -211,7 +222,7 @@ impl Tui {
 
     pub async fn suspend(&mut self) -> Result<Arc<CancellationToken>> {
         // Exit the current Tui
-        tokio::task::block_in_place(|| self.exit())?;
+        self.exit().await?;
 
         // Update the status and initialize a cancellation token
         let token = Arc::new(CancellationToken::new());
@@ -244,6 +255,13 @@ impl Tui {
 
 impl Drop for Tui {
     fn drop(&mut self) {
-        let _ = self.exit().inspect_err(|err| error!("Failed to exit Tui: {err}"));
+        block_in_place(|| {
+            let handle = Handle::current();
+            let _ = handle.block_on(async {
+                self.exit()
+                    .await
+                    .inspect_err(|err| error!("Failed to exit Tui: {err}"))
+            });
+        })
     }
 }

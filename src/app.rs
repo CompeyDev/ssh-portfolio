@@ -154,12 +154,12 @@ impl App {
                 action_tx.send(Action::ClearScreen)?;
                 block_in_place(|| tui.enter())?;
             } else if self.should_quit {
-                block_in_place(|| tui.stop())?;
+                tui.stop().await?;
                 break;
             }
         }
 
-        block_in_place(|| tui.exit())
+        tui.exit().await
     }
 
     async fn handle_events(&mut self, tui: &mut Tui) -> Result<()> {
