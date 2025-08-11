@@ -9,7 +9,7 @@ use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, atproto, config::Config};
+use crate::{action::Action, config::Config};
 
 #[derive(Default)]
 pub struct Content {
@@ -178,7 +178,7 @@ impl Content {
     /// Generate the content for the "Blog" tab
     #[cfg(feature = "blog")]
     async fn blog_content(&self) -> Result<Vec<Line<'static>>> {
-        Ok(atproto::blog::get_all_posts()
+        Ok(crate::atproto::blog::get_all_posts()
             .await?
             .iter()
             .map(|post| Line::from(post.title.clone().unwrap_or("<unknown>".to_string())))
@@ -211,14 +211,16 @@ impl Component for Content {
             0 => self.about_content(area)?,
             1 => self.projects_content(),
             2 => {
-                if cfg!(feature = "blog") {
+                #[cfg(feature = "blog")]
+                {
                     let rt = tokio::runtime::Handle::current();
                     rt.block_on(self.blog_content())?
-                } else {
-                    vec![Line::from(
-                        "Blog feature is disabled. Enable the `blog` feature to view this tab.",
-                    )]
                 }
+                
+                #[cfg(not(feature = "blog"))]
+                vec![Line::from(
+                    "Blog feature is disabled. Enable the `blog` feature to view this tab.",
+                )]
             }
             _ => unreachable!(),
         };
