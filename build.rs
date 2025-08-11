@@ -4,38 +4,48 @@ use anyhow::Result;
 use ssh_key::{rand_core, Algorithm, EcdsaCurve, LineEnding, PrivateKey};
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder};
 
+const ATPROTO_LEXICON_DIR: &str = "src/atproto/lexicons";
+const ATPROTO_CLIENT_DIR: &str = "src/atproto";
 const SSH_KEY_ALGOS: &[(&'static str, Algorithm)] = &[
     ("rsa.pem", Algorithm::Rsa { hash: None }),
     ("ed25519.pem", Algorithm::Ed25519),
-    ("ecdsa.pem", Algorithm::Ecdsa {
-        curve: EcdsaCurve::NistP256,
-    }),
+    (
+        "ecdsa.pem",
+        Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP256,
+        },
+    ),
 ];
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/atproto/lexicons");
 
     // Generate openSSH host keys
-    let mut rng = rand_core::OsRng::default();
-    let keys = SSH_KEY_ALGOS
-        .iter()
-        .map(|(file_name, algo)| (*file_name, PrivateKey::random(&mut rng, algo.to_owned()).map_err(anyhow::Error::from)))
-        .collect::<Vec<(&str, Result<PrivateKey>)>>();
-
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    for (file_name, key_res) in keys {
-        if let Ok(ref key) = key_res {
-            let path = out_dir.join(file_name);
-            if path.exists() {
-                println!("cargo:warning=Skipping existing host key: {:?}", path.file_stem());
-                continue;
-            }
-            
-            key.write_openssh_file(&path, LineEnding::default())?;
-        } else {
-            println!("cargo:warning=Failed to generate host key: {:?}", key_res);
+    let mut rng = rand_core::OsRng::default();
+    for (file_name, algo) in SSH_KEY_ALGOS {
+        let path = out_dir.join(file_name);
+        if path.exists() {
+            println!(
+                "cargo:warning=Skipping existing host key: {:?}",
+                path.file_stem().unwrap()
+            );
+            continue;
         }
+
+        let key = PrivateKey::random(&mut rng, algo.to_owned()).map_err(anyhow::Error::from)?;
+        key.write_openssh_file(&path, LineEnding::default())?;
     }
+
+    // Generate ATProto client with lexicon validation
+    #[cfg(feature = "blog")]
+    atrium_codegen::genapi(
+        ATPROTO_LEXICON_DIR,
+        ATPROTO_CLIENT_DIR,
+        &[("com.whtwnd", Some("blog"))],
+    )
+    .unwrap();
 
     // Emit the build information
     let build = BuildBuilder::all_build()?;

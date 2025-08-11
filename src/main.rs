@@ -12,8 +12,15 @@ use russh::{
 use ssh::SshServer;
 use tokio::net::TcpListener;
 
+#[cfg(feature = "blog")]
+pub(crate) use atproto::com;
+#[cfg(feature = "blog")]
+pub(crate) use atrium_api::*;
+
 mod action;
 mod app;
+#[cfg(feature = "blog")]
+pub(crate) mod atproto;
 mod cli;
 mod components;
 mod config;

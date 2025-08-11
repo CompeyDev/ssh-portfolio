@@ -1,2 +1,6 @@
 /target
 .data/*.log
+
+src/atproto/*
+!src/atproto/lexicons
+!src/atproto/mod.rs
