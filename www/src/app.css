@@ -1,0 +1,36 @@
+@import url('/fonts/IosevkaSS12.css');
+@import 'tailwindcss';
+
+@theme {
+	--color-dark: oklch(0.1828 0.0204 284.2);
+	--color-primary: oklch(0.75 0.14 295);
+	--color-accent: oklch(0.8787 0.0426 272.28);
+
+	--font-iosevka: 'Iosevka SS12 Web', monospace;
+
+	--animate-sleep-z: sleepZ 1.5s ease-out forwards;
+}
+
+@layer base {
+	html,
+	body {
+		@apply bg-dark font-iosevka text-accent;
+	}
+}
+
+@keyframes sleepZ {
+	0% {
+		transform: translateY(0) translateX(0) rotate(0deg);
+		opacity: 0;
+	}
+	15% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.8;
+	}
+	100% {
+		transform: translateY(-50px) translateX(-30px) rotate(15deg);
+		opacity: 0;
+	}
+}
