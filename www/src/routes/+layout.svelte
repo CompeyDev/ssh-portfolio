@@ -1,12 +1,14 @@
 <script lang="ts">
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
 
 	let { children } = $props();
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<title>devcomp.xyz</title>
+	<link rel="icon" href="/favicon.png" />
+	<meta content="ssh devcomp.xyz" property="og:title" />
+	<meta content="#B59BFD" data-react-helmet="true" name="theme-color" />
 </svelte:head>
 
 {@render children?.()}
