@@ -96,6 +96,7 @@ impl App {
             tabs,
             content,
             cat,
+            #[cfg(feature = "blog")]
             selection_list,
         })
     }
@@ -319,7 +320,7 @@ impl App {
             .map_err(|err| std::io::Error::other(err))?;
 
             // Render the content
-            let mut content_rect = Rect {
+            let content_rect = Rect {
                 x: chunks[1].x,
                 y: chunks[1].y,
                 width: chunks[0].width,
@@ -339,22 +340,34 @@ impl App {
                 .draw(frame, frame.area())
                 .map_err(|err| std::io::Error::other(err))?;
 
-            #[cfg(feature = "blog")]
             if tabs.current_tab() == 2 {
-                // Render the post selection list if the blog tab is selected
+                let mut content_rect = content_rect;
                 content_rect.x += 1;
                 content_rect.y += 1;
                 content_rect.width -= 2;
                 content_rect.height -= 2;
 
-                self.selection_list
-                    .try_lock()
-                    .map_err(|err| std::io::Error::other(err))?
-                    .draw(
-                        frame,
-                         content_rect,
+                #[cfg(feature = "blog")]
+                {
+                    // Render the post selection list if the blog tab is selected
+                    self.selection_list
+                        .try_lock()
+                        .map_err(|err| std::io::Error::other(err))?
+                        .draw(frame, content_rect)
+                        .map_err(|err| std::io::Error::other(err))?;
+                }
+
+                #[cfg(not(feature = "blog"))]
+                {
+                    // If blog feature is not enabled, render a placeholder
+                    content_rect.height = 1;
+                    let placeholder = Paragraph::new(
+                        "Blog feature is disabled. Enable the `blog` feature to view this tab.",
                     )
-                    .map_err(|err| std::io::Error::other(err))?;
+                    .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+
+                    frame.render_widget(placeholder, content_rect);
+                }
             }
 
             Ok::<_, std::io::Error>(())
