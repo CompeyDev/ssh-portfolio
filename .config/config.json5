@@ -8,6 +8,8 @@
       "<Ctrl-z>": "Suspend", // Suspend the application
       "<right>": "NextTab", // Go to the next tab
       "<left>": "PrevTab", // Go to the previous tab
+      "<down>": "SelectNext", // Go to the next selection in options
+      "<up>": "SelectPrev", // Go to the previous selection in options
     },
   }
 }
