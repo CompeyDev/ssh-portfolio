@@ -258,7 +258,7 @@ impl Server for SshServer {
 
     #[instrument(skip(self))]
     fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
-        let session = SshSession::new();
+        let session = tokio::task::block_in_place(|| SshSession::new());
         session
     }
 }

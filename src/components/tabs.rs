@@ -35,6 +35,10 @@ impl Tabs {
             self.selected_tab.fetch_sub(1, Ordering::Relaxed);
         }
     }
+
+    pub fn current_tab(&self) -> usize {
+        self.selected_tab.load(Ordering::Relaxed)
+    }
 }
 
 impl Component for Tabs {

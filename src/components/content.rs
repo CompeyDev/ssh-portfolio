@@ -177,12 +177,12 @@ impl Content {
 
     /// Generate the content for the "Blog" tab
     #[cfg(feature = "blog")]
-    async fn blog_content(&self) -> Result<Vec<Line<'static>>> {
+    pub async fn blog_content(&self) -> Result<Vec<String>> {
         Ok(crate::atproto::blog::get_all_posts()
             .await?
             .iter()
-            .map(|post| Line::from(post.title.clone().unwrap_or("<unknown>".to_string())))
-            .collect())
+            .map(|post| post.title.clone().unwrap_or("<unknown>".to_string()))
+            .collect::<Vec<String>>())
     }
 }
 
@@ -207,22 +207,13 @@ impl Component for Content {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
-        let content = match self.selected_tab.load(Ordering::Relaxed) {
+        let selected_tab = self.selected_tab.load(Ordering::Relaxed);
+        let content = match selected_tab {
             0 => self.about_content(area)?,
             1 => self.projects_content(),
-            2 => {
-                #[cfg(feature = "blog")]
-                {
-                    let rt = tokio::runtime::Handle::current();
-                    rt.block_on(self.blog_content())?
-                }
-                
-                #[cfg(not(feature = "blog"))]
-                vec![Line::from(
-                    "Blog feature is disabled. Enable the `blog` feature to view this tab.",
-                )]
-            }
-            _ => unreachable!(),
+            /* Blog tab handled in `App::render` */
+
+            _ => vec![],
         };
 
         // Create the border lines

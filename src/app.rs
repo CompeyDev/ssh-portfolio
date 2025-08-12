@@ -43,6 +43,8 @@ pub struct App {
     tabs: Arc<Mutex<Tabs>>,
     content: Arc<Mutex<Content>>,
     cat: Arc<Mutex<Cat>>,
+    #[cfg(feature = "blog")]
+    selection_list: Arc<Mutex<SelectionList>>,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -70,6 +72,13 @@ impl App {
 
         let cat = Arc::new(Mutex::new(Cat::new()));
 
+        #[cfg(feature = "blog")]
+        let rt = tokio::runtime::Handle::current();
+        #[cfg(feature = "blog")]
+        let selection_list = Arc::new(Mutex::new(SelectionList::new(
+            rt.block_on(content.blocking_lock().blog_content())?,
+        )));
+
         Ok(Self {
             tick_rate,
             frame_rate,
@@ -87,6 +96,8 @@ impl App {
             tabs,
             content,
             cat,
+            #[cfg(feature = "blog")]
+            selection_list,
         })
     }
 
@@ -248,6 +259,11 @@ impl App {
             if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
+
+            #[cfg(feature = "blog")]
+            if let Some(action) = self.selection_list.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
         }
         Ok(())
     }
@@ -287,33 +303,34 @@ impl App {
             );
 
             // Render the tabs
-            self.tabs
+            let mut tabs = self
+                .tabs
                 .try_lock()
-                .map_err(|err| std::io::Error::other(err))?
-                .draw(
-                    frame,
-                    Rect {
-                        x: chunks[0].x + 14,
-                        y: chunks[0].y + 1,
-                        width: chunks[0].width - 6,
-                        height: chunks[0].height,
-                    },
-                )
                 .map_err(|err| std::io::Error::other(err))?;
 
+            tabs.draw(
+                frame,
+                Rect {
+                    x: chunks[0].x + 14,
+                    y: chunks[0].y + 1,
+                    width: chunks[0].width - 6,
+                    height: chunks[0].height,
+                },
+            )
+            .map_err(|err| std::io::Error::other(err))?;
+
             // Render the content
+            let content_rect = Rect {
+                x: chunks[1].x,
+                y: chunks[1].y,
+                width: chunks[0].width,
+                height: frame.area().height - chunks[0].height,
+            };
+
             self.content
                 .try_lock()
                 .map_err(|err| std::io::Error::other(err))?
-                .draw(
-                    frame,
-                    Rect {
-                        x: chunks[1].x,
-                        y: chunks[1].y,
-                        width: chunks[0].width,
-                        height: frame.area().height - chunks[0].height,
-                    },
-                )
+                .draw(frame, content_rect)
                 .map_err(|err| std::io::Error::other(err))?;
 
             // Render the eepy cat :3
@@ -322,6 +339,36 @@ impl App {
                 .map_err(|err| std::io::Error::other(err))?
                 .draw(frame, frame.area())
                 .map_err(|err| std::io::Error::other(err))?;
+
+            if tabs.current_tab() == 2 {
+                let mut content_rect = content_rect;
+                content_rect.x += 1;
+                content_rect.y += 1;
+                content_rect.width -= 2;
+                content_rect.height -= 2;
+
+                #[cfg(feature = "blog")]
+                {
+                    // Render the post selection list if the blog tab is selected
+                    self.selection_list
+                        .try_lock()
+                        .map_err(|err| std::io::Error::other(err))?
+                        .draw(frame, content_rect)
+                        .map_err(|err| std::io::Error::other(err))?;
+                }
+
+                #[cfg(not(feature = "blog"))]
+                {
+                    // If blog feature is not enabled, render a placeholder
+                    content_rect.height = 1;
+                    let placeholder = Paragraph::new(
+                        "Blog feature is disabled. Enable the `blog` feature to view this tab.",
+                    )
+                    .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+
+                    frame.render_widget(placeholder, content_rect);
+                }
+            }
 
             Ok::<_, std::io::Error>(())
         })?;

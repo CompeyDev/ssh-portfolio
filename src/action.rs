@@ -15,5 +15,9 @@ pub enum Action {
 
     // Tab management
     NextTab,
-    PrevTab
+    PrevTab,
+
+    // Selection management
+    SelectNext,
+    SelectPrev,
 }

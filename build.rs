@@ -4,7 +4,9 @@ use anyhow::Result;
 use ssh_key::{rand_core, Algorithm, EcdsaCurve, LineEnding, PrivateKey};
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder};
 
+#[cfg(feature = "blog")]
 const ATPROTO_LEXICON_DIR: &str = "src/atproto/lexicons";
+#[cfg(feature = "blog")]
 const ATPROTO_CLIENT_DIR: &str = "src/atproto";
 const SSH_KEY_ALGOS: &[(&'static str, Algorithm)] = &[
     ("rsa.pem", Algorithm::Rsa { hash: None }),

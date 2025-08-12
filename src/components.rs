@@ -15,10 +15,14 @@ use crate::{action::Action, config::Config, tui::Event};
 mod tabs;
 mod content;
 mod cat;
+#[cfg(feature = "blog")]
+mod selection_list;
 
 pub use tabs::*;
 pub use content::*;
 pub use cat::*;
+#[cfg(feature = "blog")]
+pub use selection_list::*;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 ///
