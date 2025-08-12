@@ -3,10 +3,11 @@ use std::{io::Write, net::SocketAddr, sync::Arc};
 use async_trait::async_trait;
 use color_eyre::eyre::{self, eyre};
 use russh::{
-    server::{Auth, Handle, Handler, Msg, Server, Session},
+    server::{Auth, Config, Handle, Handler, Msg, Server, Session},
     Channel, ChannelId, CryptoVec, Pty,
 };
 use tokio::{
+    net::TcpListener,
     runtime::Handle as TokioHandle,
     sync::{mpsc, oneshot, Mutex, RwLock},
 };
@@ -251,6 +252,18 @@ impl Handler for SshSession {
 
 #[derive(Default)]
 pub struct SshServer;
+
+impl SshServer {
+    #[instrument(level = "trace")]
+    pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
+        let listener = TcpListener::bind(addr).await?;
+
+        Self::default()
+            .run_on_socket(Arc::new(config), &listener)
+            .await
+            .map_err(|err| eyre!(err))
+    }
+}
 
 #[async_trait]
 impl Server for SshServer {

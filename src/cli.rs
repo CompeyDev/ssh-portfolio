@@ -18,8 +18,11 @@ pub struct Cli {
     #[arg(short = 'H', long, value_name = "ADDRESS", default_value_t = String::from("127.0.0.1"))]
     pub host: String,
     /// The port to start the SSH server on
-    #[arg(short, long, value_name = "PORT", default_value_t = 2222)]
-    pub port: u16,
+    #[arg(short = 'P', long, value_name = "PORT", default_value_t = 2222)]
+    pub ssh_port: u16,
+    /// The port to start the web server on
+    #[arg(short = 'p', long, value_name = "PORT", default_value_t = 80)]
+    pub web_port: u16
 }
 
 const VERSION_MESSAGE: &str = concat!(
