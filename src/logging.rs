@@ -2,7 +2,7 @@ use std::io::stderr;
 
 use color_eyre::{eyre::eyre, Result};
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter, util::TryInitError};
+use tracing_subscriber::{fmt, prelude::*, util::TryInitError, EnvFilter};
 
 use crate::config;
 
@@ -52,6 +52,7 @@ pub fn init() -> Result<()> {
     // Build the subscriber and apply it
     tracing_subscriber::registry()
         .with(env_filter)
+        .with(ErrorLayer::default())
         .with(
             // Logging to file
             fmt::layer()
@@ -66,15 +67,19 @@ pub fn init() -> Result<()> {
             let layer = fmt::layer()
                 .with_writer(stderr)
                 .with_timer(tracing_subscriber::fmt::time())
+                .with_thread_ids(true)
                 .with_ansi(true);
 
             // Enable compact mode for release logs
             #[cfg(not(debug_assertions))]
-            return layer.compact();
-            #[cfg(debug_assertions)]
+            let layer = layer
+                .compact()
+                .without_time()
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
+                .with_target(false)
+                .with_thread_ids(false);
             layer
         })
-        .with(ErrorLayer::default())
         .try_init()
         .map_err(|err: TryInitError| eyre!(err))
 }
