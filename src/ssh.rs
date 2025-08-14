@@ -109,12 +109,6 @@ impl SshSession {
         session: &Handle,
         channel_id: ChannelId,
     ) -> eyre::Result<()> {
-        // let mut tui_inner = Tui::new(writer.clone())?;
-        // let mut app_tmp = app.lock().await;
-        // app_tmp.resize(&mut tui_inner, 169, 34)?;
-        // drop(app_tmp);
-        // tui.write().await.get_or_insert(tui_inner);
-
         app.lock_owned().await.run(writer, tui).await?;
         session
             .close(channel_id)
@@ -152,7 +146,7 @@ impl Handler for SshSession {
 
             tracing::info!("Serving app to open session");
             tokio::task::spawn(async move {
-                let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = (|| async {
+                let result = async || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     let ((term_width, term_height), (pixel_width, pixel_height)) = rx.await?;
                     let writer = Arc::new(Mutex::new(Terminal::new(SshBackend::new(
                         TermWriter::new(session_handle.clone(), channel),
@@ -164,11 +158,9 @@ impl Handler for SshSession {
 
                     Self::run_app(inner_app, writer, tui, &session_handle, channel_id).await?;
                     Ok(())
-                })(
-                )
-                .await;
+                };
 
-                match result {
+                match result().await {
                     Ok(()) => tracing::info!("Session exited successfully"),
                     Err(err) => {
                         tracing::error!("Session errored: {err}");
