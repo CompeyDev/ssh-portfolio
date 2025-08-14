@@ -25,24 +25,21 @@ pub struct Cli {
     pub web_port: u16,
 }
 
-const VERSION_MESSAGE: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    "-",
-    env!("VERGEN_GIT_DESCRIBE"),
-    " (",
-    env!("VERGEN_BUILD_DATE"),
-    ")"
-);
-
 pub fn version() -> String {
     let author = clap::crate_authors!();
+    let version_message = format!(
+        "v{}-{} ({}, {})",
+        env!("CARGO_PKG_VERSION"),
+        &env!("VERGEN_GIT_SHA")[..7],
+        env!("VERGEN_GIT_BRANCH"),
+        env!("VERGEN_BUILD_DATE")
+    );
 
-    // let current_exe_path = PathBuf::from(clap::crate_name!()).display().to_string();
     let config_dir_path = get_config_dir().display().to_string();
     let data_dir_path = get_data_dir().display().to_string();
 
     formatdoc! {"
-        {VERSION_MESSAGE}
+        {version_message}
 
         Authors: {author}
 
