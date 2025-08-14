@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::block_in_place;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::action::Action;
 use crate::components::*;
@@ -224,13 +224,13 @@ impl App {
         };
         match keymap.get(&vec![key]) {
             Some(action) => {
-                info!("Got action: {action:?}");
+                debug!("Got action: {action:?}");
                 action_tx.send(action.clone())?;
             }
             _ => {
                 self.last_tick_key_events.push(key);
                 if let Some(action) = keymap.get(&self.last_tick_key_events) {
-                    info!("Got action: {action:?}");
+                    debug!("Got action: {action:?}");
                     action_tx.send(action.clone())?;
                 }
             }
