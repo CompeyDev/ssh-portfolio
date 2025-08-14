@@ -121,7 +121,8 @@ impl App {
 
         // Force the dimensions to be validated before rendering anything by sending a `Resize` event
         let term_size = tui.terminal.try_lock()?.size()?;
-        tui.event_tx.send(Event::Resize(term_size.width, term_size.height))?;
+        tui.event_tx
+            .send(Event::Resize(term_size.width, term_size.height))?;
 
         // Blocking initialization logic for tui and components
         block_in_place(|| {
@@ -305,6 +306,8 @@ impl App {
 
                 let error_width = error_message.chars().count().try_into().unwrap_or(55);
                 let error_height = 5;
+
+                #[rustfmt::skip]
                 let area = Block::default()
                     .borders(Borders::all())
                     .style(Style::new().fg(Color::White))
