@@ -53,14 +53,14 @@ impl KeyCodeExt for KeyCode {
             // Caps/Num/Scroll Lock
             20 => KeyCode::CapsLock,
             144 => KeyCode::NumLock,
-            145 => KeyCode::ScrollLock, 
+            145 => KeyCode::ScrollLock,
 
             // Pause/Break
             19 => KeyCode::Pause,
 
             // Anything else
             _ => KeyCode::Null,
-        }    
+        }
     }
 
     #[rustfmt::skip]
@@ -95,18 +95,25 @@ impl KeyCodeExt for KeyCode {
             [single] => *single,
             _ => KeyCode::Null,
         }
-    }    
+    }
 
     fn into_key_event(self) -> KeyEvent {
         match self {
-            Self::Char(CTRL_C) => KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
-            Self::Char(CTRL_D) => KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
-            Self::Char(CTRL_Z) => KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL),
+            Self::Char(CTRL_C) => {
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            }
+            Self::Char(CTRL_D) => {
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)
+            }
+            Self::Char(CTRL_Z) => {
+                KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL)
+            }
             other => KeyEvent::new(other, KeyModifiers::empty()),
         }
     }
 }
 
+#[rustfmt::skip]
 #[cfg(test)]
 mod tests {
     use super::*;

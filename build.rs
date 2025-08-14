@@ -1,4 +1,5 @@
-use std::{env, path::PathBuf};
+use std::env;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use ssh_key::{rand_core, Algorithm, EcdsaCurve, LineEnding, PrivateKey};
@@ -11,12 +12,7 @@ const ATPROTO_CLIENT_DIR: &str = "src/atproto";
 const SSH_KEY_ALGOS: &[(&str, Algorithm)] = &[
     ("rsa.pem", Algorithm::Rsa { hash: None }),
     ("ed25519.pem", Algorithm::Ed25519),
-    (
-        "ecdsa.pem",
-        Algorithm::Ecdsa {
-            curve: EcdsaCurve::NistP256,
-        },
-    ),
+    ("ecdsa.pem", Algorithm::Ecdsa { curve: EcdsaCurve::NistP256 }),
 ];
 
 fn main() -> Result<()> {
@@ -36,7 +32,8 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let key = PrivateKey::random(&mut rng, algo.to_owned()).map_err(anyhow::Error::from)?;
+        let key = PrivateKey::random(&mut rng, algo.to_owned())
+            .map_err(anyhow::Error::from)?;
         key.write_openssh_file(&path, LineEnding::default())?;
     }
 

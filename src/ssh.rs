@@ -1,23 +1,20 @@
-use std::{io::Write, net::SocketAddr, sync::Arc};
+use std::io::Write;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use color_eyre::eyre::{self, eyre};
-use russh::{
-    server::{Auth, Config, Handle, Handler, Msg, Server, Session},
-    Channel, ChannelId, CryptoVec, Pty,
-};
-use tokio::{
-    net::TcpListener,
-    runtime::Handle as TokioHandle,
-    sync::{mpsc, oneshot, Mutex, RwLock},
-};
+use russh::server::{Auth, Config, Handle, Handler, Msg, Server, Session};
+use russh::{Channel, ChannelId, CryptoVec, Pty};
+use tokio::net::TcpListener;
+use tokio::runtime::Handle as TokioHandle;
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tracing::instrument;
 
-use crate::{
-    app::App,
-    tui::{backend::SshBackend, Terminal, Tui},
-    OPTIONS,
-};
+use crate::app::App;
+use crate::tui::backend::SshBackend;
+use crate::tui::{Terminal, Tui};
+use crate::OPTIONS;
 
 #[derive(Debug)]
 pub struct TermWriter {
@@ -31,11 +28,7 @@ impl TermWriter {
     #[instrument(skip(session, channel), level = "trace", fields(channel_id = %channel.id()))]
     fn new(session: Handle, channel: Channel<Msg>) -> Self {
         tracing::trace!("Acquiring new SSH writer");
-        Self {
-            session,
-            channel,
-            inner: CryptoVec::new(),
-        }
+        Self { session, channel, inner: CryptoVec::new() }
     }
 
     fn flush_inner(&mut self) -> std::io::Result<()> {
@@ -45,7 +38,9 @@ impl TermWriter {
                 .data(self.channel.id(), self.inner.clone())
                 .await
                 .map_err(|err| {
-                    std::io::Error::other(String::from_iter(err.iter().map(|item| *item as char)))
+                    std::io::Error::other(String::from_iter(
+                        err.iter().map(|item| *item as char),
+                    ))
                 })
                 .map(|_| self.inner.clear())
         })
@@ -165,7 +160,8 @@ impl Handler for SshSession {
                     Ok(()) => tracing::info!("Session exited successfully"),
                     Err(err) => {
                         tracing::error!("Session errored: {err}");
-                        let _ = session_handle.channel_failure(channel_id).await;
+                        let _ =
+                            session_handle.channel_failure(channel_id).await;
                     }
                 }
             });
@@ -189,7 +185,10 @@ impl Handler for SshSession {
         session: &mut Session,
     ) -> Result<(), Self::Error> {
         tracing::info!("PTY requested by terminal: {term}");
-        tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
+        tracing::debug!(
+            "dims: {col_width} * {row_height}, pixel: {pix_width} * \
+             {pix_height}"
+        );
 
         if !term.contains("xterm") {
             session.channel_failure(channel_id)?;
@@ -218,7 +217,10 @@ impl Handler for SshSession {
         data: &[u8],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
+        tracing::debug!(
+            "Received keystroke data from SSH: {:?}, sending",
+            data
+        );
         self.keystroke_tx
             .send(data.to_vec())
             .map_err(|_| eyre!("Failed to send event keystroke data"))
@@ -251,8 +253,7 @@ impl SshServer {
     pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
         let listener = TcpListener::bind(addr).await?;
 
-        Self
-            .run_on_socket(Arc::new(config), &listener)
+        Self.run_on_socket(Arc::new(config), &listener)
             .await
             .map_err(|err| eyre!(err))
     }
@@ -264,7 +265,6 @@ impl Server for SshServer {
 
     #[instrument(skip(self))]
     fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
-        
         tokio::task::block_in_place(SshSession::new)
     }
 }

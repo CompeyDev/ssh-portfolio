@@ -1,6 +1,8 @@
 #![allow(dead_code)] // Remove this once you start using the code
 
-use std::{collections::HashMap, env, path::PathBuf};
+use std::collections::HashMap;
+use std::env;
+use std::path::PathBuf;
 
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -8,10 +10,12 @@ use derive_deref::{Deref, DerefMut};
 use directories::ProjectDirs;
 use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
-use serde::{de::Deserializer, Deserialize};
+use serde::de::Deserializer;
+use serde::Deserialize;
 use tracing::error;
 
-use crate::{action::Action, app::Mode};
+use crate::action::Action;
+use crate::app::Mode;
 
 const CONFIG: &str = include_str!("../.config/config.json5");
 
@@ -34,7 +38,8 @@ pub struct Config {
 }
 
 lazy_static! {
-    pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
+    pub static ref PROJECT_NAME: String =
+        env!("CARGO_CRATE_NAME").to_uppercase().to_string();
     pub static ref DATA_FOLDER: Option<PathBuf> =
         env::var(format!("{}_DATA", PROJECT_NAME.clone()))
             .ok()
@@ -72,7 +77,10 @@ impl Config {
             }
         }
         if !found_config {
-            error!("No configuration file found. Application may not behave as expected");
+            error!(
+                "No configuration file found. Application may not behave as \
+                 expected"
+            );
         }
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
@@ -80,9 +88,7 @@ impl Config {
         for (mode, default_bindings) in default_config.keybindings.iter() {
             let user_bindings = cfg.keybindings.entry(*mode).or_default();
             for (key, cmd) in default_bindings.iter() {
-                user_bindings
-                    .entry(key.clone())
-                    .or_insert_with(|| cmd.clone());
+                user_bindings.entry(key.clone()).or_insert_with(|| cmd.clone());
             }
         }
         for (mode, default_styles) in default_config.styles.iter() {
@@ -128,16 +134,19 @@ pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
-        let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(deserializer)?;
+        D: Deserializer<'de>, {
+        let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(
+            deserializer,
+        )?;
 
         let keybindings = parsed_map
             .into_iter()
             .map(|(mode, inner_map)| {
                 let converted_inner_map = inner_map
                     .into_iter()
-                    .map(|(key_str, cmd)| (parse_key_sequence(&key_str).unwrap(), cmd))
+                    .map(|(key_str, cmd)| {
+                        (parse_key_sequence(&key_str).unwrap(), cmd)
+                    })
                     .collect();
                 (mode, converted_inner_map)
             })
@@ -292,7 +301,9 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
 }
 
 pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
-    if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
+    if raw.chars().filter(|c| *c == '>').count()
+        != raw.chars().filter(|c| *c == '<').count()
+    {
         return Err(format!("Unable to parse `{}`", raw));
     }
     let raw = if !raw.contains("><") {
@@ -324,9 +335,10 @@ pub struct Styles(pub HashMap<Mode, HashMap<String, Style>>);
 impl<'de> Deserialize<'de> for Styles {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
-        let parsed_map = HashMap::<Mode, HashMap<String, String>>::deserialize(deserializer)?;
+        D: Deserializer<'de>, {
+        let parsed_map = HashMap::<Mode, HashMap<String, String>>::deserialize(
+            deserializer,
+        )?;
 
         let styles = parsed_map
             .into_iter()
@@ -387,27 +399,22 @@ fn parse_color(s: &str) -> Option<Color> {
     let s = s.trim_end();
     if s.contains("bright color") {
         let s = s.trim_start_matches("bright ");
-        let c = s
-            .trim_start_matches("color")
-            .parse::<u8>()
-            .unwrap_or_default();
+        let c = s.trim_start_matches("color").parse::<u8>().unwrap_or_default();
         Some(Color::Indexed(c.wrapping_shl(8)))
     } else if s.contains("color") {
-        let c = s
-            .trim_start_matches("color")
-            .parse::<u8>()
-            .unwrap_or_default();
+        let c = s.trim_start_matches("color").parse::<u8>().unwrap_or_default();
         Some(Color::Indexed(c))
     } else if s.contains("gray") {
         let c = 232
-            + s.trim_start_matches("gray")
-                .parse::<u8>()
-                .unwrap_or_default();
+            + s.trim_start_matches("gray").parse::<u8>().unwrap_or_default();
         Some(Color::Indexed(c))
     } else if s.contains("rgb") {
-        let red = (s.as_bytes()[3] as char).to_digit(10).unwrap_or_default() as u8;
-        let green = (s.as_bytes()[4] as char).to_digit(10).unwrap_or_default() as u8;
-        let blue = (s.as_bytes()[5] as char).to_digit(10).unwrap_or_default() as u8;
+        let red =
+            (s.as_bytes()[3] as char).to_digit(10).unwrap_or_default() as u8;
+        let green =
+            (s.as_bytes()[4] as char).to_digit(10).unwrap_or_default() as u8;
+        let blue =
+            (s.as_bytes()[5] as char).to_digit(10).unwrap_or_default() as u8;
         let c = 16 + red * 36 + green * 6 + blue;
         Some(Color::Indexed(c))
     } else if s == "bold black" {
@@ -480,7 +487,8 @@ mod tests {
 
     #[test]
     fn test_process_color_string() {
-        let (color, modifiers) = process_color_string("underline bold inverse gray");
+        let (color, modifiers) =
+            process_color_string("underline bold inverse gray");
         assert_eq!(color, "gray");
         assert!(modifiers.contains(Modifier::UNDERLINED));
         assert!(modifiers.contains(Modifier::BOLD));
@@ -562,7 +570,10 @@ mod tests {
 
         assert_eq!(
             parse_key_event("ctrl-shift-enter").unwrap(),
-            KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL | KeyModifiers::SHIFT)
+            KeyEvent::new(
+                KeyCode::Enter,
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            )
         );
     }
 

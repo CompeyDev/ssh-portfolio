@@ -1,10 +1,12 @@
 use color_eyre::Result;
 use indoc::indoc;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, config::Config};
+use crate::action::Action;
+use crate::config::Config;
 
 const CAT_ASCII_ART: &str = indoc! {r#"
       |\__/,|   (`\
@@ -26,7 +28,10 @@ impl Cat {
 }
 
 impl Component for Cat {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(
+        &mut self,
+        tx: UnboundedSender<Action>,
+    ) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }

@@ -1,9 +1,8 @@
-use std::{io, ops::{Deref, DerefMut}};
+use std::io;
+use std::ops::{Deref, DerefMut};
 
-use ratatui::{
-    backend::{Backend, CrosstermBackend, WindowSize},
-    layout::Size,
-};
+use ratatui::backend::{Backend, CrosstermBackend, WindowSize};
+use ratatui::layout::Size;
 
 use crate::ssh::TermWriter;
 
@@ -15,28 +14,30 @@ pub struct SshBackend {
 }
 
 impl SshBackend {
-    pub fn new(writer: TermWriter, init_width: u16, init_height: u16, init_pixel_width: u16, init_pixdel_height: u16) -> Self {
+    pub fn new(
+        writer: TermWriter,
+        init_width: u16,
+        init_height: u16,
+        init_pixel_width: u16,
+        init_pixel_height: u16,
+    ) -> Self {
         let inner = CrosstermBackend::new(writer);
         SshBackend {
             inner,
             dims: (init_width, init_height),
-            pixel: (init_pixel_width, init_pixdel_height),
+            pixel: (init_pixel_width, init_pixel_height),
         }
     }
 }
 
 impl Backend for SshBackend {
     fn size(&self) -> io::Result<Size> {
-        Ok(Size {
-            width: self.dims.0,
-            height: self.dims.1,
-        })
+        Ok(Size { width: self.dims.0, height: self.dims.1 })
     }
 
     fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
-        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
-    {
+        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>, {
         self.inner.draw(content)
     }
 
@@ -48,7 +49,9 @@ impl Backend for SshBackend {
         self.inner.show_cursor()
     }
 
-    fn get_cursor_position(&mut self) -> io::Result<ratatui::prelude::Position> {
+    fn get_cursor_position(
+        &mut self,
+    ) -> io::Result<ratatui::prelude::Position> {
         self.inner.get_cursor_position()
     }
 

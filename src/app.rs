@@ -1,28 +1,23 @@
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
-};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::{mpsc, Mutex, RwLock},
-    task::block_in_place,
-};
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::task::block_in_place;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::{
-    action::Action,
-    components::*,
-    config::Config,
-    keycode::KeyCodeExt,
-    tui::{Event, Terminal, Tui},
-};
+use crate::action::Action;
+use crate::components::*;
+use crate::config::Config;
+use crate::keycode::KeyCodeExt;
+use crate::tui::{Event, Terminal, Tui};
 
 pub struct App {
     config: Config,
@@ -49,7 +44,9 @@ pub struct App {
     selection_list: Arc<Mutex<SelectionList>>,
 }
 
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize,
+)]
 pub enum Mode {
     #[default]
     Home,
@@ -121,8 +118,7 @@ impl App {
 
         // Force the dimensions to be validated before rendering anything by sending a `Resize` event
         let term_size = tui.terminal.try_lock()?.size()?;
-        tui.event_tx
-            .send(Event::Resize(term_size.width, term_size.height))?;
+        tui.event_tx.send(Event::Resize(term_size.width, term_size.height))?;
 
         // Blocking initialization logic for tui and components
         block_in_place(|| {
@@ -256,7 +252,8 @@ impl App {
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
                 Action::Resize(w, h) => {
-                    self.needs_resize = w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
+                    self.needs_resize =
+                        w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
                     self.resize(tui, w, h)?;
                 }
                 Action::Render => self.render(tui)?,
@@ -264,10 +261,14 @@ impl App {
             }
 
             // Update each component
-            if let Some(action) = self.tabs.try_lock()?.update(action.clone())? {
+            if let Some(action) =
+                self.tabs.try_lock()?.update(action.clone())?
+            {
                 self.action_tx.send(action)?;
             }
-            if let Some(action) = self.content.try_lock()?.update(action.clone())? {
+            if let Some(action) =
+                self.content.try_lock()?.update(action.clone())?
+            {
                 self.action_tx.send(action)?;
             }
             if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
@@ -275,7 +276,9 @@ impl App {
             }
 
             #[cfg(feature = "blog")]
-            if let Some(action) = self.selection_list.try_lock()?.update(action.clone())? {
+            if let Some(action) =
+                self.selection_list.try_lock()?.update(action.clone())?
+            {
                 self.action_tx.send(action)?;
             }
         }
@@ -342,15 +345,15 @@ impl App {
         term.try_draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+                .constraints(
+                    [Constraint::Length(3), Constraint::Min(0)].as_ref(),
+                )
                 .split(frame.area());
 
             // Render the domain name text
             let title = Paragraph::new(Line::from(Span::styled(
                 "devcomp.xyz ",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
             )));
 
             frame.render_widget(
@@ -364,10 +367,8 @@ impl App {
             );
 
             // Render the tabs
-            let mut tabs = self
-                .tabs
-                .try_lock()
-                .map_err(std::io::Error::other)?;
+            let mut tabs =
+                self.tabs.try_lock().map_err(std::io::Error::other)?;
 
             tabs.draw(
                 frame,
@@ -423,9 +424,14 @@ impl App {
                     // If blog feature is not enabled, render a placeholder
                     content_rect.height = 1;
                     let placeholder = Paragraph::new(
-                        "Blog feature is disabled. Enable the `blog` feature to view this tab.",
+                        "Blog feature is disabled. Enable the `blog` feature \
+                         to view this tab.",
                     )
-                    .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+                    .style(
+                        Style::default()
+                            .fg(Color::Red)
+                            .add_modifier(Modifier::BOLD),
+                    );
 
                     frame.render_widget(placeholder, content_rect);
                 }

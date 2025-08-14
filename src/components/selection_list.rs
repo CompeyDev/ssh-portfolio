@@ -1,11 +1,11 @@
 use color_eyre::eyre::Result;
-use ratatui::{
-    style::{Color, Style},
-    widgets::{List, ListState},
-};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{List, ListState};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{action::Action, components::Component, config::Config};
+use crate::action::Action;
+use crate::components::Component;
+use crate::config::Config;
 
 #[derive(Default)]
 pub struct SelectionList {
@@ -21,7 +21,8 @@ impl SelectionList {
         list_state.select_first();
 
         Self {
-            options: List::new(options).highlight_style(Style::default().fg(Color::Yellow)),
+            options: List::new(options)
+                .highlight_style(Style::default().fg(Color::Yellow)),
             list_state,
             ..Default::default()
         }
@@ -29,7 +30,10 @@ impl SelectionList {
 }
 
 impl Component for SelectionList {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(
+        &mut self,
+        tx: UnboundedSender<Action>,
+    ) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }
@@ -51,8 +55,16 @@ impl Component for SelectionList {
         Ok(None)
     }
 
-    fn draw(&mut self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) -> Result<()> {
-        frame.render_stateful_widget(self.options.clone(), area, &mut self.list_state);
+    fn draw(
+        &mut self,
+        frame: &mut ratatui::Frame,
+        area: ratatui::prelude::Rect,
+    ) -> Result<()> {
+        frame.render_stateful_widget(
+            self.options.clone(),
+            area,
+            &mut self.list_state,
+        );
         Ok(())
     }
 }

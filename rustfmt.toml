@@ -1,0 +1,12 @@
+edition = "2021"
+use_small_heuristics = "Max"
+max_width = 80
+newline_style = "Unix"
+
+indent_style = "Block"
+hard_tabs = false
+
+format_strings = true
+brace_style = "PreferSameLine"
+
+imports_granularity = "Module"

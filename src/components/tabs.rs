@@ -1,11 +1,14 @@
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use color_eyre::Result;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, config::Config};
+use crate::action::Action;
+use crate::config::Config;
 
 #[derive(Default)]
 pub struct Tabs {
@@ -16,12 +19,11 @@ pub struct Tabs {
 }
 
 impl Tabs {
-    pub fn new(tabs: Vec<&'static str>, selected_tab: Arc<AtomicUsize>) -> Self {
-        Self {
-            tabs,
-            selected_tab,
-            ..Default::default()
-        }
+    pub fn new(
+        tabs: Vec<&'static str>,
+        selected_tab: Arc<AtomicUsize>,
+    ) -> Self {
+        Self { tabs, selected_tab, ..Default::default() }
     }
 
     pub fn next(&mut self) {
@@ -42,7 +44,10 @@ impl Tabs {
 }
 
 impl Component for Tabs {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(
+        &mut self,
+        tx: UnboundedSender<Action>,
+    ) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }
@@ -60,7 +65,7 @@ impl Component for Tabs {
             Action::PrevTab => self.previous(),
             _ => {}
         };
-        
+
         Ok(None)
     }
 
@@ -69,9 +74,7 @@ impl Component for Tabs {
 
         for (i, &tab) in self.tabs.iter().enumerate() {
             let style = if self.selected_tab.load(Ordering::Relaxed) == i {
-                Style::default()
-                    .fg(Color::Magenta)
-                    .add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -84,25 +87,20 @@ impl Component for Tabs {
             tab_lines[1]
                 .spans
                 .push(Span::styled("│", Style::default().fg(Color::DarkGray)));
-            tab_lines[1]
-                .spans
-                .push(Span::styled(format!(" {} ", tab), style));
+            tab_lines[1].spans.push(Span::styled(format!(" {} ", tab), style));
             tab_lines[1]
                 .spans
                 .push(Span::styled("│", Style::default().fg(Color::DarkGray)));
         }
 
-        let tabs_widget = Paragraph::new(tab_lines).block(Block::default().borders(Borders::NONE));
+        let tabs_widget = Paragraph::new(tab_lines)
+            .block(Block::default().borders(Borders::NONE));
 
         frame.render_widget(
             tabs_widget,
-            Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: 2,
-            },
+            Rect { x: area.x, y: area.y, width: area.width, height: 2 },
         );
 
         Ok(())
-    }}
+    }
+}

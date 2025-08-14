@@ -1,6 +1,8 @@
-use std::{io, net::SocketAddr};
+use std::io;
+use std::net::SocketAddr;
 
-use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::middleware::Logger;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rust_embed::Embed;
 use tracing::instrument;
 

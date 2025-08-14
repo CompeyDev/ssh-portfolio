@@ -1,15 +1,16 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
 use figlet_rs::FIGfont;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
-use crate::{action::Action, config::Config};
+use crate::action::Action;
+use crate::config::Config;
 
 #[derive(Default)]
 pub struct Content {
@@ -20,19 +21,17 @@ pub struct Content {
 
 impl Content {
     pub fn new(selected_tab: Arc<AtomicUsize>) -> Self {
-        Self {
-            selected_tab,
-            ..Default::default()
-        }
+        Self { selected_tab, ..Default::default() }
     }
 
     /// Generate the content for the "About" tab
     fn about_content(&self, area: Rect) -> Result<Vec<Line<'static>>> {
-        let greetings_header = FIGfont::from_content(include_str!("../../assets/drpepper.flf"))
-            .map_err(|err| eyre!(err))?
-            .convert("hiya!")
-            .ok_or(eyre!("Failed to create figlet header for about page"))?
-            .to_string();
+        let greetings_header =
+            FIGfont::from_content(include_str!("../../assets/drpepper.flf"))
+                .map_err(|err| eyre!(err))?
+                .convert("hiya!")
+                .ok_or(eyre!("Failed to create figlet header for about page"))?
+                .to_string();
 
         let lines: Vec<String> = greetings_header
             .trim_end_matches('\n')
@@ -49,11 +48,18 @@ impl Content {
                         Span::from(" "),
                         Span::from(line.clone()),
                         Span::from("  I'm Erica ("),
-                        Span::styled("she/they", Style::default().add_modifier(Modifier::ITALIC)),
-                        Span::from("), and I make scalable systems or something. IDFK."),
+                        Span::styled(
+                            "she/they",
+                            Style::default().add_modifier(Modifier::ITALIC),
+                        ),
+                        Span::from(
+                            "), and I make scalable systems or something. \
+                             IDFK.",
+                        ),
                     ]);
                 }
-                Line::raw(format!(" {}", line)).style(Style::default().add_modifier(Modifier::BOLD))
+                Line::raw(format!(" {}", line))
+                    .style(Style::default().add_modifier(Modifier::BOLD))
             })
             .collect::<Vec<Line<'static>>>();
 
@@ -61,7 +67,9 @@ impl Content {
             Line::from(""),
             Line::from(vec![
                 Span::from(" "),
-                Span::from("I specialize in systems programming, primarily in "),
+                Span::from(
+                    "I specialize in systems programming, primarily in ",
+                ),
                 Span::styled(
                     "Rust 🦀",
                     Style::default()
@@ -78,19 +86,30 @@ impl Content {
                 Span::from("."),
             ]),
             Line::from(""),
-            Line::from(" I am an avid believer of open-source software, and contribute to a few projects such as:"),
+            Line::from(
+                " I am an avid believer of open-source software, and \
+                 contribute to a few projects such as:",
+            ),
         ]);
 
         let projects = vec![
-            (Style::default()
-                .fg(Color::LightMagenta)
-                .add_modifier(Modifier::BOLD), "lune-org/lune: A standalone Luau runtime"),
-            (Style::default()
-                .fg(Color::Blue)
-                .add_modifier(Modifier::BOLD), "DiscordLuau/discord-luau: A Luau library for creating Discord bots, powered by Lune"),
-            (Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD), "pesde-pkg/pesde: A package manager for the Luau programming language, supporting multiple runtimes including Roblox and Lune"),
+            (
+                Style::default()
+                    .fg(Color::LightMagenta)
+                    .add_modifier(Modifier::BOLD),
+                "lune-org/lune: A standalone Luau runtime",
+            ),
+            (
+                Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
+                "DiscordLuau/discord-luau: A Luau library for creating \
+                 Discord bots, powered by Lune",
+            ),
+            (
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                "pesde-pkg/pesde: A package manager for the Luau programming \
+                 language, supporting multiple runtimes including Roblox and \
+                 Lune",
+            ),
         ];
 
         for (style, project) in projects {
@@ -106,55 +125,69 @@ impl Content {
             let bullet = " • ";
             let indent = "   ";
 
-            let first_line = if project.len() > area.width as usize - bullet.len() {
-                let split_point = project
-                    .char_indices()
-                    .take_while(|(i, _)| *i < area.width as usize - bullet.len())
-                    .last()
-                    .map(|(i, _)| i)
-                    .unwrap_or(project.len());
-                let (first, rest) = project.split_at(split_point);
-                content.push(Line::from(vec![
-                    Span::from(bullet),
-                    formatted_left,
-                    Span::from(":"),
-                    Span::styled(
-                        first
-                            .trim_start_matches(format!("{left}:").as_str())
-                            .to_string(),
-                        Style::default().fg(Color::White),
-                    ),
-                ]));
-                rest.to_string()
-            } else {
-                content.push(Line::from(vec![
-                    Span::from(bullet),
-                    formatted_left,
-                    Span::from(":"),
-                    Span::styled(right.to_string(), Style::default().fg(Color::White)),
-                ]));
-                String::new()
-            };
+            let first_line =
+                if project.len() > area.width as usize - bullet.len() {
+                    let split_point = project
+                        .char_indices()
+                        .take_while(|(i, _)| {
+                            *i < area.width as usize - bullet.len()
+                        })
+                        .last()
+                        .map(|(i, _)| i)
+                        .unwrap_or(project.len());
+                    let (first, rest) = project.split_at(split_point);
+                    content.push(Line::from(vec![
+                        Span::from(bullet),
+                        formatted_left,
+                        Span::from(":"),
+                        Span::styled(
+                            first
+                                .trim_start_matches(format!("{left}:").as_str())
+                                .to_string(),
+                            Style::default().fg(Color::White),
+                        ),
+                    ]));
+                    rest.to_string()
+                } else {
+                    content.push(Line::from(vec![
+                        Span::from(bullet),
+                        formatted_left,
+                        Span::from(":"),
+                        Span::styled(
+                            right.to_string(),
+                            Style::default().fg(Color::White),
+                        ),
+                    ]));
+                    String::new()
+                };
 
             let mut remaining_text = first_line;
             while !remaining_text.is_empty() {
                 if remaining_text.len() > area.width as usize - indent.len() {
                     let split_point = remaining_text
                         .char_indices()
-                        .take_while(|(i, _)| *i < area.width as usize - indent.len())
+                        .take_while(|(i, _)| {
+                            *i < area.width as usize - indent.len()
+                        })
                         .last()
                         .map(|(i, _)| i)
                         .unwrap_or(remaining_text.len());
                     let (first, rest) = remaining_text.split_at(split_point);
                     content.push(Line::from(vec![
                         Span::from(indent),
-                        Span::styled(first.to_string(), Style::default().fg(Color::White)),
+                        Span::styled(
+                            first.to_string(),
+                            Style::default().fg(Color::White),
+                        ),
                     ]));
                     remaining_text = rest.to_string();
                 } else {
                     content.push(Line::from(vec![
                         Span::from(indent),
-                        Span::styled(remaining_text.clone(), Style::default().fg(Color::White)),
+                        Span::styled(
+                            remaining_text.clone(),
+                            Style::default().fg(Color::White),
+                        ),
                     ]));
                     remaining_text.clear();
                 }
@@ -164,7 +197,8 @@ impl Content {
         content.extend(vec![
             Line::from(""),
             Line::from(
-                " I am also a fan of the 8 bit aesthetic and think seals are super adorable :3",
+                " I am also a fan of the 8 bit aesthetic and think seals are \
+                 super adorable :3",
             ),
         ]);
 
@@ -187,7 +221,10 @@ impl Content {
 }
 
 impl Component for Content {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
+    fn register_action_handler(
+        &mut self,
+        tx: UnboundedSender<Action>,
+    ) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }
@@ -212,7 +249,6 @@ impl Component for Content {
             0 => self.about_content(area)?,
             1 => self.projects_content(),
             /* Blog tab handled in `App::render` */
-
             _ => vec![],
         };
 
@@ -232,24 +268,23 @@ impl Component for Content {
         let mut current_pos = 1 + devcomp_width;
 
         for (i, &tab) in tabs.iter().enumerate() {
-            let (char, style) = if i == self.selected_tab.load(Ordering::Relaxed) {
-                (
-                    "━",
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                ("─", Style::default().fg(Color::DarkGray))
-            };
+            let (char, style) =
+                if i == self.selected_tab.load(Ordering::Relaxed) {
+                    (
+                        "━",
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    ("─", Style::default().fg(Color::DarkGray))
+                };
 
             let default_style = Style::default().fg(Color::DarkGray);
 
             border_top.spans.push(Span::styled("┴", default_style));
             border_top.spans.push(Span::styled("─", default_style));
-            border_top
-                .spans
-                .push(Span::styled(char.repeat(tab.len()), style));
+            border_top.spans.push(Span::styled(char.repeat(tab.len()), style));
             border_top.spans.push(Span::styled("─", default_style));
             border_top.spans.push(Span::styled("┴", default_style));
 
@@ -270,8 +305,10 @@ impl Component for Content {
             Style::default().fg(Color::DarkGray),
         ));
 
-        let border_left = Span::styled("│", Style::default().fg(Color::DarkGray));
-        let border_right = Span::styled("│", Style::default().fg(Color::DarkGray));
+        let border_left =
+            Span::styled("│", Style::default().fg(Color::DarkGray));
+        let border_right =
+            Span::styled("│", Style::default().fg(Color::DarkGray));
 
         // Render the content
         let content_widget = Paragraph::new(content)
@@ -291,12 +328,7 @@ impl Component for Content {
         // Render the borders
         frame.render_widget(
             Paragraph::new(border_top),
-            Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: 1,
-            },
+            Rect { x: area.x, y: area.y, width: area.width, height: 1 },
         );
 
         frame.render_widget(
@@ -312,12 +344,7 @@ impl Component for Content {
         for i in 1..area.height - 1 {
             frame.render_widget(
                 Paragraph::new(Line::from(border_left.clone())),
-                Rect {
-                    x: area.x,
-                    y: area.y + i,
-                    width: 1,
-                    height: 1,
-                },
+                Rect { x: area.x, y: area.y + i, width: 1, height: 1 },
             );
 
             frame.render_widget(
