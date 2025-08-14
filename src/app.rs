@@ -3,11 +3,10 @@ use std::sync::{atomic::AtomicUsize, Arc};
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    prelude::Rect,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -29,8 +28,11 @@ pub struct App {
     config: Config,
     tick_rate: f64,
     frame_rate: f64,
+
     should_quit: bool,
     should_suspend: bool,
+    needs_resize: bool,
+
     mode: Mode,
     last_tick_key_events: Vec<KeyEvent>,
     action_tx: mpsc::UnboundedSender<Action>,
@@ -54,6 +56,8 @@ pub enum Mode {
 }
 
 impl App {
+    pub const MIN_TUI_DIMS: (u16, u16) = (105, 25);
+
     pub fn new(
         tick_rate: f64,
         frame_rate: f64,
@@ -84,6 +88,8 @@ impl App {
             frame_rate,
             should_quit: false,
             should_suspend: false,
+            needs_resize: false,
+
             config: Config::new()?,
             mode: Mode::Home,
             last_tick_key_events: Vec::new(),
@@ -112,6 +118,10 @@ impl App {
                 .tick_rate(self.tick_rate)
                 .frame_rate(self.frame_rate),
         );
+
+        // Force the dimensions to be validated before rendering anything by sending a `Resize` event
+        let term_size = tui.terminal.try_lock()?.size()?;
+        tui.event_tx.send(Event::Resize(term_size.width, term_size.height))?;
 
         // Blocking initialization logic for tui and components
         block_in_place(|| {
@@ -244,7 +254,10 @@ impl App {
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
-                Action::Resize(w, h) => self.resize(tui, w, h)?,
+                Action::Resize(w, h) => {
+                    self.needs_resize = w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
+                    self.resize(tui, w, h)?;
+                }
                 Action::Render => self.render(tui)?,
                 _ => {}
             }
@@ -278,7 +291,52 @@ impl App {
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        tui.terminal.try_lock()?.try_draw(|frame| {
+        let mut term = tui.terminal.try_lock()?;
+        if self.needs_resize {
+            term.draw(|frame| {
+                let size = frame.area();
+                let error_message = format!(
+                    "window size must be at least {}x{}, currently {}x{}",
+                    Self::MIN_TUI_DIMS.0,
+                    Self::MIN_TUI_DIMS.1,
+                    size.width,
+                    size.height
+                );
+
+                let error_width = error_message.chars().count().try_into().unwrap_or(55);
+                let error_height = 5;
+                let area = Block::default()
+                    .borders(Borders::all())
+                    .style(Style::new().fg(Color::White))
+                    .inner(Rect::new(
+                        size.width
+                            .checked_sub(error_width)
+                            .and_then(|n| n.checked_div(2))
+                            .unwrap_or_default(),
+                        size.height
+                            .checked_sub(error_height)
+                            .and_then(|n| n.checked_div(2))
+                            .unwrap_or_default(),
+                        if error_width < u16::MIN || error_width > size.width { u16::MIN } else { error_width },
+                        if size.height > error_height { error_height } else { size.height },
+                    ));
+
+                frame.render_widget(Clear, area);
+                frame.render_widget(
+                    Paragraph::new(
+                        Line::from(error_message.clone())
+                            .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                    )
+                    .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: false }),
+                    area,
+                );
+            })?;
+
+            return Ok(());
+        }
+
+        term.try_draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
