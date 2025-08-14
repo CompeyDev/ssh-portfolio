@@ -15,12 +15,6 @@ pub fn init() -> Result<()> {
         .into_hooks();
     eyre_hook.install()?;
     std::panic::set_hook(Box::new(move |panic_info| {
-        // if let Ok(mut t) = crate::tui::Tui::new() {
-        //     if let Err(r) = t.exit() {
-        //         error!("Unable to exit Terminal: {:?}", r);
-        //     }
-        // }
-
         #[cfg(not(debug_assertions))]
         {
             use human_panic::{handle_dump, metadata, print_msg};
@@ -43,10 +37,11 @@ pub fn init() -> Result<()> {
                 .lineno_suffix(true)
                 .verbosity(better_panic::Verbosity::Full)
                 .create_panic_handler()(panic_info);
-        }
 
-        std::process::exit(libc::EXIT_FAILURE);
+            std::process::exit(libc::EXIT_FAILURE);
+        }
     }));
+
     Ok(())
 }
 
