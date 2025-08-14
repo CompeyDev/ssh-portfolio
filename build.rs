@@ -8,7 +8,7 @@ use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder};
 const ATPROTO_LEXICON_DIR: &str = "src/atproto/lexicons";
 #[cfg(feature = "blog")]
 const ATPROTO_CLIENT_DIR: &str = "src/atproto";
-const SSH_KEY_ALGOS: &[(&'static str, Algorithm)] = &[
+const SSH_KEY_ALGOS: &[(&str, Algorithm)] = &[
     ("rsa.pem", Algorithm::Rsa { hash: None }),
     ("ed25519.pem", Algorithm::Ed25519),
     (
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
 
     // Generate openSSH host keys
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let mut rng = rand_core::OsRng::default();
+    let mut rng = rand_core::OsRng;
     for (file_name, algo) in SSH_KEY_ALGOS {
         let path = out_dir.join(file_name);
         if path.exists() {

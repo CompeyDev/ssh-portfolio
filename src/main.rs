@@ -37,8 +37,8 @@ const SSH_KEYS: &[&[u8]] = &[
 #[rustfmt::skip]
 lazy_static! {
     pub(crate) static ref OPTIONS: Cli = Cli::parse();
-    pub(crate) static ref SSH_SOCKET_ADDR: Option<SocketAddr> = SocketAddr::try_from((host_ip().ok()?, OPTIONS.ssh_port)).ok();
-    pub(crate) static ref WEB_SERVER_ADDR: Option<SocketAddr> = SocketAddr::try_from((host_ip().ok()?, OPTIONS.web_port)).ok();
+    pub(crate) static ref SSH_SOCKET_ADDR: Option<SocketAddr> = Some(SocketAddr::from((host_ip().ok()?, OPTIONS.ssh_port)));
+    pub(crate) static ref WEB_SERVER_ADDR: Option<SocketAddr> = Some(SocketAddr::from((host_ip().ok()?, OPTIONS.web_port)));
 }
 
 #[tokio::main]
@@ -63,7 +63,8 @@ pub fn host_ip() -> Result<[u8; 4]> {
             .host
             .splitn(4, ".")
             .map(|octet_str| {
-                u8::from_str_radix(octet_str, 10)
+                octet_str
+                    .parse::<u8>()
                     .map_err(|_| eyre!("Octet component out of range (expected u8)"))
             })
             .collect::<Result<Vec<u8>>>()?,
@@ -72,13 +73,15 @@ pub fn host_ip() -> Result<[u8; 4]> {
 }
 
 fn ssh_config() -> Config {
-    let mut conf = Config::default();
-    conf.methods = MethodSet::NONE;
-    conf.keys = SSH_KEYS
-        .to_vec()
-        .iter()
-        .filter_map(|pem| PrivateKey::from_openssh(pem).ok())
-        .collect();
+    let conf = Config {
+        methods: MethodSet::NONE,
+        keys: SSH_KEYS
+            .to_vec()
+            .iter()
+            .filter_map(|pem| PrivateKey::from_openssh(pem).ok())
+            .collect(),
+        ..Default::default()
+    };
 
     tracing::trace!("SSH config: {:#?}", conf);
     conf

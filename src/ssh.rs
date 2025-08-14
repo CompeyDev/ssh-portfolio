@@ -47,7 +47,7 @@ impl TermWriter {
                 .map_err(|err| {
                     std::io::Error::other(String::from_iter(err.iter().map(|item| *item as char)))
                 })
-                .and_then(|()| Ok(self.inner.clear()))
+                .map(|_| self.inner.clear())
         })
     }
 }
@@ -70,6 +70,7 @@ impl Write for TermWriter {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct SshSession {
     app: Option<Arc<Mutex<App>>>,
     keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -250,7 +251,7 @@ impl SshServer {
     pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
         let listener = TcpListener::bind(addr).await?;
 
-        Self::default()
+        Self
             .run_on_socket(Arc::new(config), &listener)
             .await
             .map_err(|err| eyre!(err))
@@ -263,7 +264,7 @@ impl Server for SshServer {
 
     #[instrument(skip(self))]
     fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
-        let session = tokio::task::block_in_place(|| SshSession::new());
-        session
+        
+        tokio::task::block_in_place(SshSession::new)
     }
 }

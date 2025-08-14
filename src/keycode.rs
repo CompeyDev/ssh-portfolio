@@ -59,7 +59,7 @@ impl KeyCodeExt for KeyCode {
             19 => KeyCode::Pause,
 
             // Anything else
-            0 | _ => KeyCode::Null,
+            _ => KeyCode::Null,
         }    
     }
 

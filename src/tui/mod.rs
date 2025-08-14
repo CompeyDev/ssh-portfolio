@@ -157,7 +157,7 @@ impl Tui {
 
     pub async fn stop(&self) -> Result<()> {
         self.cancel();
-        
+
         let attempt_timeout = Duration::from_millis(50);
         let abort_shutdown = async {
             while !self.task.is_finished() {
@@ -165,7 +165,7 @@ impl Tui {
             }
         };
 
-        if let Err(_) = timeout(attempt_timeout, self.await_shutdown()).await {
+        if timeout(attempt_timeout, self.await_shutdown()).await.is_err() {
             timeout(attempt_timeout, abort_shutdown)
                 .await
                 .inspect_err(|_| {
@@ -198,21 +198,18 @@ impl Tui {
     pub async fn exit(&mut self) -> Result<()> {
         self.stop().await?;
         // TODO: enable raw mode for pty
-        if true || crossterm::terminal::is_raw_mode_enabled()? {
-            let mut term = self.terminal.try_lock()?;
-            term.flush()?;
+        let mut term = self.terminal.try_lock()?;
+        term.flush()?;
 
-            if self.paste {
-                crossterm::execute!(term.backend_mut(), DisableBracketedPaste)?;
-            }
-
-            if self.mouse {
-                crossterm::execute!(term.backend_mut(), DisableMouseCapture)?;
-            }
-
-            crossterm::execute!(term.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
-            // crossterm::terminal::disable_raw_mode()?; // TODO: disable raw mode
+        if self.paste {
+            crossterm::execute!(term.backend_mut(), DisableBracketedPaste)?;
         }
+
+        if self.mouse {
+            crossterm::execute!(term.backend_mut(), DisableMouseCapture)?;
+        }
+
+        crossterm::execute!(term.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
         Ok(())
     }
 

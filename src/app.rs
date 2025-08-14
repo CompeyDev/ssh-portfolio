@@ -113,7 +113,7 @@ impl App {
         tui: Arc<RwLock<Option<Tui>>>,
     ) -> Result<()> {
         let mut tui = tui.write().await;
-        let mut tui = tui.get_or_insert(
+        let tui = tui.get_or_insert(
             Tui::new(term)?
                 .tick_rate(self.tick_rate)
                 .frame_rate(self.frame_rate),
@@ -162,8 +162,8 @@ impl App {
         let action_tx = self.action_tx.clone();
         let mut resume_tx: Option<Arc<CancellationToken>> = None;
         loop {
-            self.handle_events(&mut tui).await?;
-            block_in_place(|| self.handle_actions(&mut tui))?;
+            self.handle_events(tui).await?;
+            block_in_place(|| self.handle_actions(tui))?;
             if self.should_suspend {
                 if let Some(ref tx) = resume_tx {
                     tx.cancel();
@@ -320,7 +320,7 @@ impl App {
                             .checked_sub(error_height)
                             .and_then(|n| n.checked_div(2))
                             .unwrap_or_default(),
-                        if error_width < u16::MIN || error_width > size.width { u16::MIN } else { error_width },
+                        if error_width > size.width { u16::MIN } else { error_width },
                         if size.height > error_height { error_height } else { size.height },
                     ));
 
@@ -367,7 +367,7 @@ impl App {
             let mut tabs = self
                 .tabs
                 .try_lock()
-                .map_err(|err| std::io::Error::other(err))?;
+                .map_err(std::io::Error::other)?;
 
             tabs.draw(
                 frame,
@@ -378,7 +378,7 @@ impl App {
                     height: chunks[0].height,
                 },
             )
-            .map_err(|err| std::io::Error::other(err))?;
+            .map_err(std::io::Error::other)?;
 
             // Render the content
             let content_rect = Rect {
@@ -390,16 +390,16 @@ impl App {
 
             self.content
                 .try_lock()
-                .map_err(|err| std::io::Error::other(err))?
+                .map_err(std::io::Error::other)?
                 .draw(frame, content_rect)
-                .map_err(|err| std::io::Error::other(err))?;
+                .map_err(std::io::Error::other)?;
 
             // Render the eepy cat :3
             self.cat
                 .try_lock()
-                .map_err(|err| std::io::Error::other(err))?
+                .map_err(std::io::Error::other)?
                 .draw(frame, frame.area())
-                .map_err(|err| std::io::Error::other(err))?;
+                .map_err(std::io::Error::other)?;
 
             if tabs.current_tab() == 2 {
                 let mut content_rect = content_rect;
@@ -413,9 +413,9 @@ impl App {
                     // Render the post selection list if the blog tab is selected
                     self.selection_list
                         .try_lock()
-                        .map_err(|err| std::io::Error::other(err))?
+                        .map_err(std::io::Error::other)?
                         .draw(frame, content_rect)
-                        .map_err(|err| std::io::Error::other(err))?;
+                        .map_err(std::io::Error::other)?;
                 }
 
                 #[cfg(not(feature = "blog"))]

@@ -69,7 +69,7 @@ pub mod blog {
             .com
             .atproto
             .repo
-            .list_records(Object::from(list_records::Parameters {
+            .list_records(list_records::Parameters {
                 extra_data: Ipld::Null,
                 data: list_records::ParametersData {
                     collection: com::whtwnd::blog::Entry::nsid(),
@@ -81,7 +81,7 @@ pub mod blog {
                             .map_err(|_| eyre!("Invalid repo handle"))?,
                     ),
                 },
-            }))
+            })
             .await?
             .records;
 
