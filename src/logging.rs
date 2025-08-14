@@ -30,13 +30,21 @@ pub fn init() -> Result<()> {
     //
 
     // Stage 1: Construct base filter
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(tracing::Level::INFO.into());
+    let env_filter = EnvFilter::builder().with_default_directive(
+        if cfg!(debug_assertions) {
+            tracing::Level::DEBUG.into()
+        } else {
+            tracing::Level::INFO.into()
+        },
+    );
 
     // Stage 2: Attempt to read from {RUST|CRATE_NAME}_LOG env var or ignore
-    let env_filter = env_filter.try_from_env().unwrap_or_else(|_| {
-        env_filter.with_env_var(LOG_ENV.to_string()).from_env_lossy()
-    });
+    let env_filter = env_filter
+        .try_from_env()
+        .unwrap_or_else(|_| {
+            env_filter.with_env_var(LOG_ENV.to_string()).from_env_lossy()
+        })
+        .add_directive("russh::cipher=info".parse().unwrap());
 
     // Stage 3: Enable directives to reduce verbosity for release mode builds
     #[cfg(not(debug_assertions))]
