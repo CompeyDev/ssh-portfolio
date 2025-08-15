@@ -204,6 +204,7 @@ impl Content {
 
         Ok(content)
     }
+
     /// Generate the content for the "Projects" tab
     fn projects_content(&self) -> Vec<Line<'static>> {
         vec![Line::from("WIP")]
@@ -211,12 +212,16 @@ impl Content {
 
     /// Generate the content for the "Blog" tab
     #[cfg(feature = "blog")]
-    pub async fn blog_content(&self) -> Result<Vec<String>> {
+    pub async fn blog_content(&self) -> Result<Vec<(String, String)>> {
         Ok(crate::atproto::blog::get_all_posts()
             .await?
             .iter()
-            .map(|post| post.title.clone().unwrap_or("<unknown>".to_string()))
-            .collect::<Vec<String>>())
+            .map_while(|post| {
+                post.title
+                    .clone()
+                    .map(|title| (title, post.content.clone()))
+            })
+            .collect::<Vec<(String, String)>>())
     }
 }
 

@@ -41,7 +41,7 @@ pub struct App {
     content: Arc<Mutex<Content>>,
     cat: Arc<Mutex<Cat>>,
     #[cfg(feature = "blog")]
-    selection_list: Arc<Mutex<SelectionList>>,
+    blog_posts: Arc<Mutex<BlogPosts>>,
 }
 
 #[derive(
@@ -76,8 +76,8 @@ impl App {
         #[cfg(feature = "blog")]
         let rt = tokio::runtime::Handle::current();
         #[cfg(feature = "blog")]
-        let selection_list = Arc::new(Mutex::new(SelectionList::new(
-            rt.block_on(content.blocking_lock().blog_content())?,
+        let blog_posts = Arc::new(Mutex::new(BlogPosts::new(
+            rt.block_on(content.try_lock()?.blog_content())?,
         )));
 
         Ok(Self {
@@ -100,7 +100,7 @@ impl App {
             content,
             cat,
             #[cfg(feature = "blog")]
-            selection_list,
+            blog_posts,
         })
     }
 
@@ -134,7 +134,11 @@ impl App {
             self.cat
                 .try_lock()?
                 .register_action_handler(self.action_tx.clone())?;
-
+            #[cfg(feature = "blog")]
+            self.blog_posts
+                .try_lock()?
+                .register_action_handler(self.action_tx.clone())?;
+            
             // Register config handlers
             self.tabs
                 .try_lock()?
@@ -145,12 +149,19 @@ impl App {
             self.cat
                 .try_lock()?
                 .register_config_handler(self.config.clone())?;
-
+            #[cfg(feature = "blog")]
+            self.blog_posts
+                .try_lock()?
+                .register_config_handler(self.config.clone())?;
+            
             // Initialize components
             let size = tui.terminal.try_lock()?.size()?;
             self.tabs.try_lock()?.init(size)?;
             self.content.try_lock()?.init(size)?;
+            #[cfg(feature = "blog")]
             self.cat.try_lock()?.init(size)?;
+
+            self.blog_posts.try_lock()?.init(size)?;
 
             Ok::<_, eyre::Error>(())
         })?;
@@ -247,7 +258,11 @@ impl App {
                 Action::Tick => {
                     self.last_tick_key_events.drain(..);
                 }
-                Action::Quit => self.should_quit = true,
+                Action::Quit => {
+                    if !self.blog_posts.try_lock()?.is_in_post() {
+                        self.should_quit = true;
+                    }
+                }
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
@@ -277,7 +292,7 @@ impl App {
 
             #[cfg(feature = "blog")]
             if let Some(action) =
-                self.selection_list.try_lock()?.update(action.clone())?
+                self.blog_posts.try_lock()?.update(action.clone())?
             {
                 self.action_tx.send(action)?;
             }
@@ -412,7 +427,7 @@ impl App {
                 #[cfg(feature = "blog")]
                 {
                     // Render the post selection list if the blog tab is selected
-                    self.selection_list
+                    self.blog_posts
                         .try_lock()
                         .map_err(std::io::Error::other)?
                         .draw(frame, content_rect)

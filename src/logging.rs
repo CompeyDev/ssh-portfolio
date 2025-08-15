@@ -44,7 +44,8 @@ pub fn init() -> Result<()> {
         .unwrap_or_else(|_| {
             env_filter.with_env_var(LOG_ENV.to_string()).from_env_lossy()
         })
-        .add_directive("russh::cipher=info".parse().unwrap());
+        .add_directive("russh::cipher=info".parse().unwrap())
+        .add_directive("tui_markdown=info".parse().unwrap());
 
     // Stage 3: Enable directives to reduce verbosity for release mode builds
     #[cfg(not(debug_assertions))]

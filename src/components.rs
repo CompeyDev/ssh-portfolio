@@ -11,13 +11,16 @@ use crate::tui::Event;
 //
 // Component re-exports
 //
-
+#[cfg(feature = "blog")]
+mod blog;
 mod cat;
 mod content;
 #[cfg(feature = "blog")]
 mod selection_list;
 mod tabs;
 
+#[cfg(feature = "blog")]
+pub use blog::*;
 pub use cat::*;
 pub use content::*;
 #[cfg(feature = "blog")]

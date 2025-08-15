@@ -7,12 +7,12 @@ use crate::action::Action;
 use crate::components::Component;
 use crate::config::Config;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SelectionList {
-    command_tx: Option<UnboundedSender<Action>>,
     config: Config,
     options: List<'static>,
     list_state: ListState,
+    action_tx: Option<UnboundedSender<Action>>,
 }
 
 impl SelectionList {
@@ -30,16 +30,17 @@ impl SelectionList {
 }
 
 impl Component for SelectionList {
+    fn register_config_handler(&mut self, config: Config) -> Result<()> {
+        tracing::warn!("handle config");
+        self.config = config;
+        Ok(())
+    }
+
     fn register_action_handler(
         &mut self,
         tx: UnboundedSender<Action>,
     ) -> Result<()> {
-        self.command_tx = Some(tx);
-        Ok(())
-    }
-
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
-        self.config = config;
+        self.action_tx = Some(tx);
         Ok(())
     }
 
@@ -47,12 +48,15 @@ impl Component for SelectionList {
         match action {
             Action::Tick => {}
             Action::Render => {}
+            Action::Continue(None) => if let Some(tx) = &self.action_tx {
+                tx.send(Action::Continue(self.list_state.selected()))?;
+            }
             Action::SelectNext => self.list_state.select_next(),
             Action::SelectPrev => self.list_state.select_previous(),
             _ => {}
         };
 
-        Ok(None)
+        Ok(Some(action))
     }
 
     fn draw(
