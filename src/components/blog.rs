@@ -1,23 +1,29 @@
+use std::sync::Arc;
+
 use color_eyre::Result;
 use ratatui::widgets::Widget;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::Action;
+use crate::com;
 use crate::components::{Component, SelectionList};
 
+pub type Post = Arc<com::whtwnd::blog::entry::Record>;
 #[derive(Debug)]
 pub struct BlogPosts {
-    titles: SelectionList,
-    contents: Vec<String>,
+    list: SelectionList<Post>,
+    posts: Vec<Post>,
     in_post: Option<usize>,
 }
 
 impl BlogPosts {
-    pub fn new(posts: Vec<(String, String)>) -> Self {
-        let (titles, contents): (Vec<String>, Vec<String>) =
-            posts.iter().cloned().unzip();
-
-        Self { titles: SelectionList::new(titles), contents, in_post: None }
+    pub fn new(posts: Vec<Post>) -> Self {
+        let posts_ref = posts.to_vec();
+        Self {
+            list: SelectionList::new(posts),
+            posts: posts_ref,
+            in_post: None,
+        }
     }
 
     pub fn is_in_post(&self) -> bool {
@@ -30,18 +36,18 @@ impl Component for BlogPosts {
         &mut self,
         config: crate::config::Config,
     ) -> Result<()> {
-        self.titles.register_config_handler(config)
+        self.list.register_config_handler(config)
     }
-    
+
     fn register_action_handler(
         &mut self,
         tx: UnboundedSender<Action>,
     ) -> Result<()> {
-        self.titles.register_action_handler(tx)
+        self.list.register_action_handler(tx)
     }
 
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        match self.titles.update(action.clone())?.unwrap() {
+        match self.list.update(action.clone())?.unwrap() {
             // safe to unwrap, guaranteed to not be `None`
             Action::Tick => {}
             Action::Render => {}
@@ -63,15 +69,16 @@ impl Component for BlogPosts {
     ) -> Result<()> {
         if let Some(post_id_inner) = self.in_post {
             let post_body = self
-                .contents
+                .posts
                 .get(post_id_inner)
-                .cloned()
-                .unwrap_or("404 - Blog not found!".to_string());
+                .map_or(String::from("404 - Blog not found!"), |post| {
+                    post.content.clone()
+                });
 
             let post_widget = tui_markdown::from_str(&post_body);
-            post_widget.render(area, frame.buffer_mut()); 
+            post_widget.render(area, frame.buffer_mut());
         } else {
-            self.titles.draw(frame, area)?;
+            self.list.draw(frame, area)?;
         }
 
         Ok(())

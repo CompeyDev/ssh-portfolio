@@ -10,6 +10,8 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
 use crate::action::Action;
+#[cfg(feature = "blog")]
+use crate::components::Post;
 use crate::config::Config;
 
 #[derive(Default)]
@@ -212,16 +214,12 @@ impl Content {
 
     /// Generate the content for the "Blog" tab
     #[cfg(feature = "blog")]
-    pub async fn blog_content(&self) -> Result<Vec<(String, String)>> {
+    pub async fn blog_content(&self) -> Result<Vec<Post>> {
         Ok(crate::atproto::blog::get_all_posts()
             .await?
             .iter()
-            .map_while(|post| {
-                post.title
-                    .clone()
-                    .map(|title| (title, post.content.clone()))
-            })
-            .collect::<Vec<(String, String)>>())
+            .map(|post| Arc::new(post.clone()))
+            .collect())
     }
 }
 
