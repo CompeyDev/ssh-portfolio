@@ -88,6 +88,7 @@ impl SshSession {
                 keystroke_rx,
                 resize_rx,
             )
+            .inspect_err(|err| tracing::error!("Failed to create app: {err}"))
             .ok()
             .map(|app| Arc::new(Mutex::new(app))),
             tui: Arc::new(RwLock::new(None)),
