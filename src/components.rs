@@ -1,11 +1,15 @@
+use std::sync::Arc;
+
 use color_eyre::Result;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::{Rect, Size};
 use ratatui::Frame;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::RwLock;
 
 use crate::action::Action;
 use crate::config::Config;
+use crate::tui::terminal::TerminalInfo;
 use crate::tui::Event;
 
 //
@@ -61,7 +65,7 @@ pub trait Component: Send {
         let _ = config; // to appease clippy
         Ok(())
     }
-    /// Initialize the component with a specified area if necessary.
+    /// Initialize the component with a specified area and terminal kind if necessary.
     ///
     /// # Arguments
     ///
@@ -70,8 +74,8 @@ pub trait Component: Send {
     /// # Returns
     ///
     /// * `Result<()>` - An Ok result or an error.
-    fn init(&mut self, area: Size) -> Result<()> {
-        let _ = area; // to appease clippy
+    fn init(&mut self, term_info: Arc<RwLock<TerminalInfo>>, area: Size) -> Result<()> {
+        let _ = (area, term_info); // to appease clippy
         Ok(())
     }
     /// Handle incoming events and produce actions if necessary.

@@ -13,6 +13,7 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::tui::backend::SshBackend;
+use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
 use crate::tui::{Terminal, Tui};
 use crate::OPTIONS;
 
@@ -50,10 +51,7 @@ impl TermWriter {
 impl Write for TermWriter {
     #[instrument(skip(self, buf), level = "debug")]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        tracing::trace!(
-            "Writing {} bytes into SSH terminal writer buffer",
-            buf.len()
-        );
+        tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
         self.inner.extend(buf);
         Ok(buf.len())
     }
@@ -67,6 +65,7 @@ impl Write for TermWriter {
 
 #[allow(clippy::type_complexity)]
 pub struct SshSession {
+    terminal_info: Arc<RwLock<TerminalInfo>>,
     app: Option<Arc<Mutex<App>>>,
     keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
     resize_tx: mpsc::UnboundedSender<(u16, u16)>,
@@ -81,8 +80,12 @@ impl SshSession {
         let (resize_tx, resize_rx) = mpsc::unbounded_channel();
         let (init_dims_tx, init_dims_rx) = oneshot::channel();
 
+        let term_info = Arc::new(RwLock::new(TerminalInfo::default()));
+
         Self {
+            terminal_info: Arc::clone(&term_info),
             app: App::new(
+                term_info,
                 OPTIONS.tick_rate,
                 OPTIONS.frame_rate,
                 keystroke_rx,
@@ -101,16 +104,13 @@ impl SshSession {
 
     async fn run_app(
         app: Arc<Mutex<App>>,
-        writer: Arc<Mutex<Terminal>>,
+        term: Arc<Mutex<Terminal>>,
         tui: Arc<RwLock<Option<Tui>>>,
         session: &Handle,
         channel_id: ChannelId,
     ) -> eyre::Result<()> {
-        app.lock_owned().await.run(writer, tui).await?;
-        session
-            .close(channel_id)
-            .await
-            .map_err(|_| eyre!("failed to close session"))?;
+        app.lock_owned().await.run(term, tui).await?;
+        session.close(channel_id).await.map_err(|_| eyre!("failed to close session"))?;
         session
             .exit_status_request(channel_id, 0)
             .await
@@ -143,26 +143,28 @@ impl Handler for SshSession {
 
             tracing::info!("Serving app to open session");
             tokio::task::spawn(async move {
-                let result = async || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-                    let ((term_width, term_height), (pixel_width, pixel_height)) = rx.await?;
-                    let writer = Arc::new(Mutex::new(Terminal::new(SshBackend::new(
-                        TermWriter::new(session_handle.clone(), channel),
-                        term_width,
-                        term_height,
-                        pixel_width,
-                        pixel_height,
-                    ))?));
+                let result =
+                    async || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                        let ((term_width, term_height), (pixel_width, pixel_height)) =
+                            rx.await?;
+                        let writer = Arc::new(Mutex::new(Terminal::new(SshBackend::new(
+                            TermWriter::new(session_handle.clone(), channel),
+                            term_width,
+                            term_height,
+                            pixel_width,
+                            pixel_height,
+                        ))?));
 
-                    Self::run_app(inner_app, writer, tui, &session_handle, channel_id).await?;
-                    Ok(())
-                };
+                        Self::run_app(inner_app, writer, tui, &session_handle, channel_id)
+                            .await?;
+                        Ok(())
+                    };
 
                 match result().await {
                     Ok(()) => tracing::info!("Session exited successfully"),
                     Err(err) => {
                         tracing::error!("Session errored: {err}");
-                        let _ =
-                            session_handle.channel_failure(channel_id).await;
+                        let _ = session_handle.channel_failure(channel_id).await;
                     }
                 }
             });
@@ -171,6 +173,31 @@ impl Handler for SshSession {
         }
 
         Err(eyre!("Failed to initialize App for session"))
+    }
+
+    #[instrument(level = "debug", skip(self, _session), fields(channel_id = %_channel_id))]
+    async fn env_request(
+        &mut self,
+        _channel_id: ChannelId,
+        variable_name: &str,
+        variable_value: &str,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        // FIXME: currently, terminals which don't set `$TERM_PROGRAM` just get stuck in the
+        // polling loop forever where we wait for the type to be probed, a workaround is to force
+        // set the variable to an empty string or something invalid:
+        //
+        // `TERM_PROGRAM="" ssh -o SendEnv=TERM_PROGRAM devcomp.xyz`
+        if variable_name == "TERM_PROGRAM" {
+            self.terminal_info
+                .write()
+                .await
+                .set_kind(TerminalKind::from_term_program(variable_value));
+
+            tracing::info!("Terminal program found: {:?}", self.terminal_info);
+        }
+
+        Ok(())
     }
 
     #[instrument(skip_all, fields(channel_id = %channel_id))]
@@ -190,6 +217,18 @@ impl Handler for SshSession {
             "dims: {col_width} * {row_height}, pixel: {pix_width} * \
              {pix_height}"
         );
+
+        if pix_width != 0 && pix_height != 0 {
+            self.terminal_info.write().await.set_font_size((
+                (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
+                (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,
+            ));
+        } else {
+            self.terminal_info
+                .write()
+                .await
+                .set_kind(TerminalKind::Unsupported(UnsupportedReason::Unsized));
+        }
 
         if !term.contains("xterm") {
             session.channel_failure(channel_id)?;
@@ -218,10 +257,7 @@ impl Handler for SshSession {
         data: &[u8],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        tracing::debug!(
-            "Received keystroke data from SSH: {:?}, sending",
-            data
-        );
+        tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
         self.keystroke_tx
             .send(data.to_vec())
             .map_err(|_| eyre!("Failed to send event keystroke data"))
@@ -232,12 +268,15 @@ impl Handler for SshSession {
         _: ChannelId,
         col_width: u32,
         row_height: u32,
-        _: u32,
-        _: u32,
+        pix_width: u32,
+        pix_height: u32,
         _: &mut Session,
     ) -> Result<(), Self::Error> {
-        // TODO: actually make it resize properly
-        // That would involve first updating the Backend's size and then updating the rect via the event
+        self.terminal_info.write().await.set_font_size((
+            (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
+            (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,
+        ));
+
         self.resize_tx
             .send((col_width as u16, row_height as u16))
             .map_err(|_| eyre!("Failed to send pty size specifications"))?;
@@ -254,9 +293,7 @@ impl SshServer {
     pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
         let listener = TcpListener::bind(addr).await?;
 
-        Self.run_on_socket(Arc::new(config), &listener)
-            .await
-            .map_err(|err| eyre!(err))
+        Self.run_on_socket(Arc::new(config), &listener).await.map_err(|err| eyre!(err))
     }
 }
 

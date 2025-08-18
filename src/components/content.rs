@@ -14,6 +14,12 @@ use crate::action::Action;
 use crate::components::Post;
 use crate::config::Config;
 
+pub(super) fn truncate(s: &str, max: usize) -> String {
+    s.char_indices()
+        .find(|(idx, ch)| idx + ch.len_utf8() > max)
+        .map_or(s.to_string(), |(idx, _)| s[..idx].to_string() + "...")
+}
+
 #[derive(Default)]
 pub struct Content {
     command_tx: Option<UnboundedSender<Action>>,

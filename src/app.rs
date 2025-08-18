@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::time::Duration;
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -17,12 +18,14 @@ use crate::action::Action;
 use crate::components::*;
 use crate::config::Config;
 use crate::keycode::KeyCodeExt;
+use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
 use crate::tui::{Event, Terminal, Tui};
 
 pub struct App {
     config: Config,
     tick_rate: f64,
     frame_rate: f64,
+    terminal_info: Arc<RwLock<TerminalInfo>>,
 
     should_quit: bool,
     should_suspend: bool,
@@ -44,9 +47,7 @@ pub struct App {
     blog_posts: Arc<Mutex<BlogPosts>>,
 }
 
-#[derive(
-    Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize,
-)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Mode {
     #[default]
     Home,
@@ -56,6 +57,7 @@ impl App {
     pub const MIN_TUI_DIMS: (u16, u16) = (105, 25);
 
     pub fn new(
+        terminal_info: Arc<RwLock<TerminalInfo>>,
         tick_rate: f64,
         frame_rate: f64,
         keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
@@ -81,6 +83,7 @@ impl App {
         )));
 
         Ok(Self {
+            terminal_info,
             tick_rate,
             frame_rate,
             should_quit: false,
@@ -111,9 +114,7 @@ impl App {
     ) -> Result<()> {
         let mut tui = tui.write().await;
         let tui = tui.get_or_insert(
-            Tui::new(term)?
-                .tick_rate(self.tick_rate)
-                .frame_rate(self.frame_rate),
+            Tui::new(term)?.tick_rate(self.tick_rate).frame_rate(self.frame_rate),
         );
 
         // Force the dimensions to be validated before rendering anything by sending a `Resize` event
@@ -125,43 +126,33 @@ impl App {
             tui.enter()?;
 
             // Register action handlers
-            self.tabs
-                .try_lock()?
-                .register_action_handler(self.action_tx.clone())?;
-            self.content
-                .try_lock()?
-                .register_action_handler(self.action_tx.clone())?;
-            self.cat
-                .try_lock()?
-                .register_action_handler(self.action_tx.clone())?;
+            self.tabs.try_lock()?.register_action_handler(self.action_tx.clone())?;
+            self.content.try_lock()?.register_action_handler(self.action_tx.clone())?;
+            self.cat.try_lock()?.register_action_handler(self.action_tx.clone())?;
             #[cfg(feature = "blog")]
-            self.blog_posts
-                .try_lock()?
-                .register_action_handler(self.action_tx.clone())?;
-            
+            self.blog_posts.try_lock()?.register_action_handler(self.action_tx.clone())?;
+
             // Register config handlers
-            self.tabs
-                .try_lock()?
-                .register_config_handler(self.config.clone())?;
-            self.content
-                .try_lock()?
-                .register_config_handler(self.config.clone())?;
-            self.cat
-                .try_lock()?
-                .register_config_handler(self.config.clone())?;
+            self.tabs.try_lock()?.register_config_handler(self.config.clone())?;
+            self.content.try_lock()?.register_config_handler(self.config.clone())?;
+            self.cat.try_lock()?.register_config_handler(self.config.clone())?;
             #[cfg(feature = "blog")]
-            self.blog_posts
-                .try_lock()?
-                .register_config_handler(self.config.clone())?;
-            
+            self.blog_posts.try_lock()?.register_config_handler(self.config.clone())?;
+
+            while let TerminalKind::Unsupported(UnsupportedReason::Unprobed) =
+                self.terminal_info.blocking_read().kind()
+            {
+                tracing::debug!("Waiting for terminal kind to be probed...");
+                std::thread::sleep(Duration::from_millis(100));
+            }
+
             // Initialize components
             let size = tui.terminal.try_lock()?.size()?;
-            self.tabs.try_lock()?.init(size)?;
-            self.content.try_lock()?.init(size)?;
+            self.tabs.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.content.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.cat.try_lock()?.init(self.terminal_info.clone(), size)?;
             #[cfg(feature = "blog")]
-            self.cat.try_lock()?.init(size)?;
-
-            self.blog_posts.try_lock()?.init(size)?;
+            self.blog_posts.try_lock()?.init(self.terminal_info.clone(), size)?;
 
             Ok::<_, eyre::Error>(())
         })?;
@@ -267,8 +258,7 @@ impl App {
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
                 Action::Resize(w, h) => {
-                    self.needs_resize =
-                        w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
+                    self.needs_resize = w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
                     self.resize(tui, w, h)?;
                 }
                 Action::Render => self.render(tui)?,
@@ -276,14 +266,10 @@ impl App {
             }
 
             // Update each component
-            if let Some(action) =
-                self.tabs.try_lock()?.update(action.clone())?
-            {
+            if let Some(action) = self.tabs.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
-            if let Some(action) =
-                self.content.try_lock()?.update(action.clone())?
-            {
+            if let Some(action) = self.content.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
             if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
@@ -291,9 +277,7 @@ impl App {
             }
 
             #[cfg(feature = "blog")]
-            if let Some(action) =
-                self.blog_posts.try_lock()?.update(action.clone())?
-            {
+            if let Some(action) = self.blog_posts.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
         }
@@ -345,8 +329,9 @@ impl App {
                 frame.render_widget(Clear, area);
                 frame.render_widget(
                     Paragraph::new(
-                        Line::from(error_message.clone())
-                            .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                        Line::from(error_message.clone()).style(
+                            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                        ),
                     )
                     .alignment(Alignment::Center)
                     .wrap(Wrap { trim: false }),
@@ -360,9 +345,7 @@ impl App {
         term.try_draw(|frame| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(
-                    [Constraint::Length(3), Constraint::Min(0)].as_ref(),
-                )
+                .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
                 .split(frame.area());
 
             // Render the domain name text
@@ -373,17 +356,11 @@ impl App {
 
             frame.render_widget(
                 title,
-                Rect {
-                    x: chunks[0].x + 2,
-                    y: chunks[0].y + 2,
-                    width: 14,
-                    height: 1,
-                },
+                Rect { x: chunks[0].x + 2, y: chunks[0].y + 2, width: 14, height: 1 },
             );
 
             // Render the tabs
-            let mut tabs =
-                self.tabs.try_lock().map_err(std::io::Error::other)?;
+            let mut tabs = self.tabs.try_lock().map_err(std::io::Error::other)?;
 
             tabs.draw(
                 frame,
@@ -442,11 +419,7 @@ impl App {
                         "Blog feature is disabled. Enable the `blog` feature \
                          to view this tab.",
                     )
-                    .style(
-                        Style::default()
-                            .fg(Color::Red)
-                            .add_modifier(Modifier::BOLD),
-                    );
+                    .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
 
                     frame.render_widget(placeholder, content_rect);
                 }

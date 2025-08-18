@@ -1,0 +1,21 @@
+diff --git a/src/picker.rs b/src/picker.rs
+index a8f4889..b5eaf5a 100644
+--- a/src/picker.rs
++++ b/src/picker.rs
+@@ -44,11 +44,11 @@ const DEFAULT_BACKGROUND: Rgba<u8> = Rgba([0, 0, 0, 0]);
+ 
+ #[derive(Clone, Debug)]
+ pub struct Picker {
+-    font_size: FontSize,
+-    protocol_type: ProtocolType,
+-    background_color: Rgba<u8>,
+-    is_tmux: bool,
+-    capabilities: Vec<Capability>,
++    pub font_size: FontSize,
++    pub protocol_type: ProtocolType,
++    pub background_color: Rgba<u8>,
++    pub is_tmux: bool,
++    pub capabilities: Vec<Capability>,
+ }
+ 
+ /// Serde-friendly protocol-type enum for [Picker].

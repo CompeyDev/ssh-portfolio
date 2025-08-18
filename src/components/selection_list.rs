@@ -9,12 +9,6 @@ use crate::action::Action;
 use crate::components::{Component, Post};
 use crate::config::Config;
 
-fn truncate(s: &str, max: usize) -> String {
-    s.char_indices()
-        .find(|(idx, ch)| idx + ch.len_utf8() > max)
-        .map_or(s.to_string(), |(idx, _)| s[..idx].to_string() + "...")
-}
-
 #[derive(Debug)]
 pub struct SelectionList<T> {
     config: Config,
@@ -106,7 +100,7 @@ impl Component for SelectionList<Post> {
             ];
 
             let subtitle_span = Span::raw(
-                [" ", post.subtitle.as_ref().unwrap_or(&truncate(post.content.as_ref(), 40))]
+                [" ", post.subtitle.as_ref().unwrap_or(&super::truncate(post.content.as_ref(), 40))]
                     .concat(),
             );
 

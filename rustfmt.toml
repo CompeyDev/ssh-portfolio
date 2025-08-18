@@ -1,6 +1,6 @@
 edition = "2021"
 use_small_heuristics = "Max"
-max_width = 80
+max_width = 95
 newline_style = "Unix"
 
 indent_style = "Block"
@@ -8,5 +8,6 @@ hard_tabs = false
 
 format_strings = true
 brace_style = "PreferSameLine"
+chain_width = 95
 
 imports_granularity = "Module"

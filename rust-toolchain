@@ -1,1 +1,4 @@
-nightly-2025-07-30
+[toolchain]
+channel = "stable"
+version = "1.87"
+components = ["clippy", "rust-analyzer", "cargo", "rustc"]

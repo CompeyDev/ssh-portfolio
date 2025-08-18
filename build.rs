@@ -18,6 +18,10 @@ const SSH_KEY_ALGOS: &[(&str, Algorithm)] = &[
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/atproto/lexicons");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rerun-if-changed=patches/");
+
+    patch_crate::run().expect("Failed while patching");
 
     // Generate openSSH host keys
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());

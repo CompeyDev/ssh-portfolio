@@ -23,6 +23,7 @@ use tracing::error;
 
 pub(crate) mod backend;
 pub(crate) mod status;
+pub(crate) mod terminal;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
