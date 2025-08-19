@@ -213,10 +213,7 @@ impl Handler for SshSession {
         session: &mut Session,
     ) -> Result<(), Self::Error> {
         tracing::info!("PTY requested by terminal: {term}");
-        tracing::debug!(
-            "dims: {col_width} * {row_height}, pixel: {pix_width} * \
-             {pix_height}"
-        );
+        tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
         if pix_width != 0 && pix_height != 0 {
             self.terminal_info.write().await.set_font_size((

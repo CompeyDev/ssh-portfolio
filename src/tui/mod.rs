@@ -7,8 +7,8 @@ use backend::SshBackend;
 use color_eyre::Result;
 use crossterm::cursor;
 use crossterm::event::{
-    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste,
-    EnableMouseCapture, KeyEvent, MouseEvent,
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    KeyEvent, MouseEvent,
 };
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
 use serde::{Deserialize, Serialize};
@@ -118,10 +118,8 @@ impl Tui {
         tick_rate: f64,
         frame_rate: f64,
     ) {
-        let mut tick_interval =
-            interval(Duration::from_secs_f64(1.0 / tick_rate));
-        let mut render_interval =
-            interval(Duration::from_secs_f64(1.0 / frame_rate));
+        let mut tick_interval = interval(Duration::from_secs_f64(1.0 / tick_rate));
+        let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
         // if this fails, then it's likely a bug in the calling code
         event_tx.send(Event::Init).expect("failed to send init event");
@@ -162,14 +160,9 @@ impl Tui {
         };
 
         if timeout(attempt_timeout, self.await_shutdown()).await.is_err() {
-            timeout(attempt_timeout, abort_shutdown).await.inspect_err(
-                |_| {
-                    error!(
-                        "Failed to abort task in 100 milliseconds for unknown \
-                         reason"
-                    )
-                },
-            )?;
+            timeout(attempt_timeout, abort_shutdown).await.inspect_err(|_| {
+                error!("Failed to abort task in 100 milliseconds for unknown reason")
+            })?;
         }
 
         Ok(())
@@ -178,11 +171,7 @@ impl Tui {
     pub fn enter(&mut self) -> Result<()> {
         let mut term = self.terminal.try_lock()?;
         // crossterm::terminal::enable_raw_mode()?; // TODO: Enable raw mode for pty
-        crossterm::execute!(
-            term.backend_mut(),
-            EnterAlternateScreen,
-            cursor::Hide
-        )?;
+        crossterm::execute!(term.backend_mut(), EnterAlternateScreen, cursor::Hide)?;
 
         if self.mouse {
             crossterm::execute!(term.backend_mut(), EnableMouseCapture)?;
@@ -212,11 +201,7 @@ impl Tui {
             crossterm::execute!(term.backend_mut(), DisableMouseCapture)?;
         }
 
-        crossterm::execute!(
-            term.backend_mut(),
-            LeaveAlternateScreen,
-            cursor::Show
-        )?;
+        crossterm::execute!(term.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
         Ok(())
     }
 
@@ -231,8 +216,7 @@ impl Tui {
         // Update the status and initialize a cancellation token
         let token = Arc::new(CancellationToken::new());
         let suspension = Arc::new(Mutex::new(()));
-        *self.status.write().await =
-            TuiStatus::Suspended(Arc::clone(&suspension));
+        *self.status.write().await = TuiStatus::Suspended(Arc::clone(&suspension));
 
         // Spawn a task holding on the lock until a notification interrupts it
         let status = Arc::clone(&self.status);
@@ -263,9 +247,7 @@ impl Drop for Tui {
         block_in_place(|| {
             let handle = Handle::current();
             let _ = handle.block_on(async {
-                self.exit()
-                    .await
-                    .inspect_err(|err| error!("Failed to exit Tui: {err}"))
+                self.exit().await.inspect_err(|err| error!("Failed to exit Tui: {err}"))
             });
         })
     }

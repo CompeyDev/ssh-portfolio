@@ -21,9 +21,8 @@ pub fn init() -> Result<()> {
             let metadata = metadata!();
             let file_path = handle_dump(&metadata, panic_info);
             // prints human-panic message
-            print_msg(file_path, &metadata).expect(
-                "human-panic: printing error message to console failed",
-            );
+            print_msg(file_path, &metadata)
+                .expect("human-panic: printing error message to console failed");
             eprintln!("{}", panic_hook.panic_report(panic_info)); // prints color-eyre stack trace to stderr
         }
         let msg = format!("{}", panic_hook.panic_report(panic_info));

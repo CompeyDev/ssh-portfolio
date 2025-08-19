@@ -10,11 +10,7 @@ macro_rules! embedded_route {
     ($path:expr) => {
         match WebLandingServer::get($path) {
             Some(content) => HttpResponse::Ok()
-                .content_type(
-                    mime_guess::from_path($path)
-                        .first_or_octet_stream()
-                        .as_ref(),
-                )
+                .content_type(mime_guess::from_path($path).first_or_octet_stream().as_ref())
                 .body(content.data.into_owned()),
             None => HttpResponse::NotFound().body("404 Not Found"),
         }
@@ -45,11 +41,7 @@ impl WebLandingServer {
         tracing::info!("Web server listening on {}", addr);
         HttpServer::new(|| {
             // TODO: register a default service for a nicer 404 page
-            App::new()
-                .service(index)
-                .service(favicon)
-                .service(dist)
-                .wrap(Logger::default())
+            App::new().service(index).service(favicon).service(dist).wrap(Logger::default())
         })
         .bind(addr)?
         .run()

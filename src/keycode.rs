@@ -99,15 +99,9 @@ impl KeyCodeExt for KeyCode {
 
     fn into_key_event(self) -> KeyEvent {
         match self {
-            Self::Char(CTRL_C) => {
-                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
-            }
-            Self::Char(CTRL_D) => {
-                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)
-            }
-            Self::Char(CTRL_Z) => {
-                KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL)
-            }
+            Self::Char(CTRL_C) => KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            Self::Char(CTRL_D) => KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+            Self::Char(CTRL_Z) => KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL),
             other => KeyEvent::new(other, KeyModifiers::empty()),
         }
     }

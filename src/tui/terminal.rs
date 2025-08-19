@@ -1,10 +1,8 @@
 use std::default::Default;
 
 use default_variant::default;
-use ratatui_image::{
-    picker::{Capability, ProtocolType},
-    FontSize,
-};
+use ratatui_image::picker::{Capability, ProtocolType};
+use ratatui_image::FontSize;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 

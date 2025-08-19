@@ -36,8 +36,8 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let key = PrivateKey::random(&mut rng, algo.to_owned())
-            .map_err(anyhow::Error::from)?;
+        let key =
+            PrivateKey::random(&mut rng, algo.to_owned()).map_err(anyhow::Error::from)?;
         key.write_openssh_file(&path, LineEnding::default())?;
     }
 

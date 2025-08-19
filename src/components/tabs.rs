@@ -19,10 +19,7 @@ pub struct Tabs {
 }
 
 impl Tabs {
-    pub fn new(
-        tabs: Vec<&'static str>,
-        selected_tab: Arc<AtomicUsize>,
-    ) -> Self {
+    pub fn new(tabs: Vec<&'static str>, selected_tab: Arc<AtomicUsize>) -> Self {
         Self { tabs, selected_tab, ..Default::default() }
     }
 
@@ -44,10 +41,7 @@ impl Tabs {
 }
 
 impl Component for Tabs {
-    fn register_action_handler(
-        &mut self,
-        tx: UnboundedSender<Action>,
-    ) -> Result<()> {
+    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }
@@ -84,17 +78,13 @@ impl Component for Tabs {
                 Style::default().fg(Color::DarkGray),
             ));
 
-            tab_lines[1]
-                .spans
-                .push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+            tab_lines[1].spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
             tab_lines[1].spans.push(Span::styled(format!(" {} ", tab), style));
-            tab_lines[1]
-                .spans
-                .push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+            tab_lines[1].spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
         }
 
-        let tabs_widget = Paragraph::new(tab_lines)
-            .block(Block::default().borders(Borders::NONE));
+        let tabs_widget =
+            Paragraph::new(tab_lines).block(Block::default().borders(Borders::NONE));
 
         frame.render_widget(
             tabs_widget,

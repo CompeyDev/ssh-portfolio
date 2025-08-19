@@ -28,30 +28,20 @@ pub mod blog {
     lazy_static! {
         static ref POSTS_CACHE_STORE: MemoryStore<usize, (Instant, com::whtwnd::blog::entry::Record)> =
             MemoryStore::default();
-        static ref AGENT: Agent<
-            CredentialSession<
-                MemoryStore<(), Object<SessionOutputData>>,
-                ReqwestClient,
-            >,
-        > = Agent::new(CredentialSession::new(
-            ReqwestClient::new("https://bsky.social"),
-            MemorySessionStore::default(),
-        ));
+        static ref AGENT: Agent<CredentialSession<MemoryStore<(), Object<SessionOutputData>>, ReqwestClient>> =
+            Agent::new(CredentialSession::new(
+                ReqwestClient::new("https://bsky.social"),
+                MemorySessionStore::default(),
+            ));
     }
 
     #[instrument(level = "debug")]
-    pub async fn get_all_posts() -> Result<Vec<com::whtwnd::blog::entry::Record>>
-    {
+    pub async fn get_all_posts() -> Result<Vec<com::whtwnd::blog::entry::Record>> {
         let mut i = 0;
         let mut posts = Vec::new();
-        while let Some((cache_creation_time, post)) =
-            POSTS_CACHE_STORE.get(&i).await?
-        {
+        while let Some((cache_creation_time, post)) = POSTS_CACHE_STORE.get(&i).await? {
             if cache_creation_time.elapsed() > CACHE_INVALIDATION_PERIOD {
-                tracing::info!(
-                    "Cache for post #{} is stale, fetching new posts",
-                    i
-                );
+                tracing::info!("Cache for post #{} is stale, fetching new posts", i);
                 POSTS_CACHE_STORE.clear().await?;
                 return fetch_posts_into_cache().await;
             }
@@ -62,9 +52,7 @@ pub mod blog {
         }
 
         if posts.is_empty() {
-            tracing::info!(
-                "No blog posts found in cache, fetching from ATProto"
-            );
+            tracing::info!("No blog posts found in cache, fetching from ATProto");
             return fetch_posts_into_cache().await;
         }
 
@@ -72,8 +60,7 @@ pub mod blog {
     }
 
     #[instrument(level = "trace")]
-    async fn fetch_posts_into_cache(
-    ) -> Result<Vec<com::whtwnd::blog::entry::Record>> {
+    async fn fetch_posts_into_cache() -> Result<Vec<com::whtwnd::blog::entry::Record>> {
         let records = &AGENT
             .api
             .com
@@ -100,9 +87,7 @@ pub mod blog {
             .map(|elem| {
                 if let Unknown::Object(btree_map) = &elem.data.value {
                     let ser = serde_json::to_string(&btree_map)?;
-                    let des = serde_json::from_str::<
-                        com::whtwnd::blog::entry::Record,
-                    >(&ser)?;
+                    let des = serde_json::from_str::<com::whtwnd::blog::entry::Record>(&ser)?;
 
                     return Ok(des);
                 }

@@ -416,8 +416,8 @@ impl App {
                     // If blog feature is not enabled, render a placeholder
                     content_rect.height = 1;
                     let placeholder = Paragraph::new(
-                        "Blog feature is disabled. Enable the `blog` feature \
-                         to view this tab.",
+                        "Blog feature is disabled. Enable the `blog` feature to view this \
+                         tab.",
                     )
                     .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
 

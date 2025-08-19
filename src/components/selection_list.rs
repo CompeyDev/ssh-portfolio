@@ -1,8 +1,7 @@
 use chrono::DateTime;
 use color_eyre::eyre::Result;
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::Action;
@@ -100,8 +99,13 @@ impl Component for SelectionList<Post> {
             ];
 
             let subtitle_span = Span::raw(
-                [" ", post.subtitle.as_ref().unwrap_or(&super::truncate(post.content.as_ref(), 40))]
-                    .concat(),
+                [
+                    " ",
+                    post.subtitle
+                        .as_ref()
+                        .unwrap_or(&super::truncate(post.content.as_ref(), 40)),
+                ]
+                .concat(),
             );
 
             list_content.push(Line::from([line_format.as_slice(), &[subtitle_span]].concat()));

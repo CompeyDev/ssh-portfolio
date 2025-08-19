@@ -45,10 +45,7 @@ pub trait Component: Send {
     /// # Returns
     ///
     /// * `Result<()>` - An Ok result or an error.
-    fn register_action_handler(
-        &mut self,
-        tx: UnboundedSender<Action>,
-    ) -> Result<()> {
+    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         let _ = tx; // to appease clippy
         Ok(())
     }
@@ -87,15 +84,10 @@ pub trait Component: Send {
     /// # Returns
     ///
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    fn handle_events(
-        &mut self,
-        event: Option<Event>,
-    ) -> Result<Option<Action>> {
+    fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
         let action = match event {
             Some(Event::Key(key_event)) => self.handle_key_event(key_event)?,
-            Some(Event::Mouse(mouse_event)) => {
-                self.handle_mouse_event(mouse_event)?
-            }
+            Some(Event::Mouse(mouse_event)) => self.handle_mouse_event(mouse_event)?,
             _ => None,
         };
         Ok(action)
@@ -122,10 +114,7 @@ pub trait Component: Send {
     /// # Returns
     ///
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    fn handle_mouse_event(
-        &mut self,
-        mouse: MouseEvent,
-    ) -> Result<Option<Action>> {
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         let _ = mouse; // to appease clippy
         Ok(None)
     }

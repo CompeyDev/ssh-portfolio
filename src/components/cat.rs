@@ -28,10 +28,7 @@ impl Cat {
 }
 
 impl Component for Cat {
-    fn register_action_handler(
-        &mut self,
-        tx: UnboundedSender<Action>,
-    ) -> Result<()> {
+    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
         self.command_tx = Some(tx);
         Ok(())
     }
@@ -57,12 +54,7 @@ impl Component for Cat {
                     .fg(Color::Magenta)
                     .add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD),
             ),
-            Rect {
-                x: area.width - 17,
-                y: area.height - 4,
-                width: 16,
-                height: 6,
-            },
+            Rect { x: area.width - 17, y: area.height - 4, width: 16, height: 6 },
         );
 
         Ok(())

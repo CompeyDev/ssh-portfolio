@@ -50,10 +50,8 @@ async fn main() -> Result<()> {
     crate::logging::init()?;
     let _ = *OPTIONS; // force clap to run by evaluating it
 
-    let ssh_socket_addr =
-        SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
-    let web_server_addr =
-        WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
+    let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
+    let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
 
     tokio::select! {
         ssh_res = SshServer::start(ssh_socket_addr, ssh_config()) => ssh_res,
@@ -68,9 +66,9 @@ pub fn host_ip() -> Result<[u8; 4]> {
             .host
             .splitn(4, ".")
             .map(|octet_str| {
-                octet_str.parse::<u8>().map_err(|_| {
-                    eyre!("Octet component out of range (expected u8)")
-                })
+                octet_str
+                    .parse::<u8>()
+                    .map_err(|_| eyre!("Octet component out of range (expected u8)"))
             })
             .collect::<Result<Vec<u8>>>()?,
     )

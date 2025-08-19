@@ -2,16 +2,14 @@ use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 
 use color_eyre::eyre::eyre;
-use color_eyre::owo_colors::OwoColorize;
 use color_eyre::Result;
 use image::{ImageReader, Rgba};
 use ratatui::layout::{Constraint, Flex, Layout, Rect, Size};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{self, Line, Span, Text};
-use ratatui::widgets::{Block, Paragraph, Widget as _, Wrap};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use ratatui_image::picker::{Picker, ProtocolType};
 use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::{FilterType, FontSize, Resize, StatefulImage};
+use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 

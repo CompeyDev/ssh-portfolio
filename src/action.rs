@@ -1,6 +1,7 @@
 use std::fmt;
 
-use serde::{de::{self, Visitor}, Deserialize, Deserializer, Serialize};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use strum::Display;
 
 #[derive(Debug, Clone, PartialEq, Eq, Display, Serialize)]
@@ -30,8 +31,8 @@ pub enum Action {
 
 impl<'de> Deserialize<'de> for Action {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: Deserializer<'de>
-    {
+    where
+        D: Deserializer<'de>, {
         struct ActionVisitor;
 
         impl<'de> Visitor<'de> for ActionVisitor {
@@ -42,8 +43,8 @@ impl<'de> Deserialize<'de> for Action {
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Action, E>
-            where E: de::Error
-            {
+            where
+                E: de::Error, {
                 if v == "Continue" {
                     Ok(Action::Continue(None))
                 } else {
@@ -62,7 +63,7 @@ impl<'de> Deserialize<'de> for Action {
                         SelectNext,
                         SelectPrev,
                     }
-                    
+
                     let helper: Helper = serde_json::from_str(&format!("\"{}\"", v))
                         .map_err(|_| de::Error::unknown_variant(v, &["Continue"]))?;
                     Ok(match helper {

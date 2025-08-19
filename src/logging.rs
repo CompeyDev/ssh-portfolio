@@ -30,20 +30,16 @@ pub fn init() -> Result<()> {
     //
 
     // Stage 1: Construct base filter
-    let env_filter = EnvFilter::builder().with_default_directive(
-        if cfg!(debug_assertions) {
-            tracing::Level::DEBUG.into()
-        } else {
-            tracing::Level::INFO.into()
-        },
-    );
+    let env_filter = EnvFilter::builder().with_default_directive(if cfg!(debug_assertions) {
+        tracing::Level::DEBUG.into()
+    } else {
+        tracing::Level::INFO.into()
+    });
 
     // Stage 2: Attempt to read from {RUST|CRATE_NAME}_LOG env var or ignore
     let env_filter = env_filter
         .try_from_env()
-        .unwrap_or_else(|_| {
-            env_filter.with_env_var(LOG_ENV.to_string()).from_env_lossy()
-        })
+        .unwrap_or_else(|_| env_filter.with_env_var(LOG_ENV.to_string()).from_env_lossy())
         .add_directive("russh::cipher=info".parse().unwrap())
         .add_directive("tui_markdown=info".parse().unwrap());
 
@@ -86,9 +82,7 @@ pub fn init() -> Result<()> {
             let layer = layer
                 .compact()
                 .without_time()
-                .with_span_events(
-                    tracing_subscriber::fmt::format::FmtSpan::NONE,
-                )
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NONE)
                 .with_target(false)
                 .with_thread_ids(false);
             layer

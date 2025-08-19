@@ -49,9 +49,7 @@ impl Backend for SshBackend {
         self.inner.show_cursor()
     }
 
-    fn get_cursor_position(
-        &mut self,
-    ) -> io::Result<ratatui::prelude::Position> {
+    fn get_cursor_position(&mut self) -> io::Result<ratatui::prelude::Position> {
         self.inner.get_cursor_position()
     }
 
