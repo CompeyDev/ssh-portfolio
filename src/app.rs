@@ -139,11 +139,14 @@ impl App {
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.register_config_handler(self.config.clone())?;
 
-            while let TerminalKind::Unsupported(UnsupportedReason::Unprobed) =
-                self.terminal_info.blocking_read().kind()
-            {
-                tracing::debug!("Waiting for terminal kind to be probed...");
-                std::thread::sleep(Duration::from_millis(100));
+            for _ in 1..50 {
+                if matches!(
+                    self.terminal_info.blocking_read().kind(),
+                    TerminalKind::Unsupported(UnsupportedReason::Unprobed)
+                ) {
+                    tracing::debug!("Waiting for 5s for terminal info to be probed");
+                    std::thread::sleep(Duration::from_millis(100));
+                }
             }
 
             // Initialize components

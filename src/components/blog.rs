@@ -36,7 +36,9 @@ impl BlogPosts {
                 font_size: DEFAULT_FONT_SIZE,
                 protocol_type: ProtocolType::Halfblocks,
                 background_color: Rgba([0, 0, 0, 0]),
-                is_tmux: false, // FIXME: any way to figure this out?
+                // NOTE: Multiplexers such as tmux are currently unsupported, we ensure that we have an
+                // xterm based terminal emulator in ssh.rs, if not, we reject the conection to begin with
+                is_tmux: false,
                 capabilities: vec![],
             }),
             posts: posts_ref,
@@ -107,9 +109,10 @@ impl Component for BlogPosts {
             // safe to unwrap, guaranteed to not be `None`
             Action::Tick => {}
             Action::Render => {}
-
-            // FIXME: do we reload the image on every single render of a post?
             Action::Quit | Action::PrevTab | Action::NextTab => self.in_post = (None, None),
+
+            // FIXME: This makes it possible to scroll through the list with arrow keys even
+            // when it is not rendered, which is not ideal; should probably fix later, minor bug
             Action::Continue(post_id) => self.in_post.1 = post_id,
             _ => {}
         };
@@ -131,7 +134,9 @@ impl Component for BlogPosts {
             let post_body = post.title.clone().map_or(post.content.clone(), |title| {
                 format!("# {}\n\n{}", title, post.content)
             });
-            let post_content_text = tui_markdown::from_str(&post_body);
+
+            let post_body_widget =
+                Paragraph::new(tui_markdown::from_str(&post_body)).wrap(Wrap { trim: true });
 
             // FIXME: content in the body often overlaps with the `Cat` component and gets
             // formatted weirdly. maybe deal with that at some point? real solution is probably a
@@ -150,10 +155,7 @@ impl Component for BlogPosts {
                     .areas(image_area);
 
                 frame.render_stateful_widget(StatefulImage::default(), image_area, img);
-                frame.render_widget(
-                    Paragraph::new(post_content_text).wrap(Wrap { trim: true }),
-                    text_area,
-                );
+                frame.render_widget(post_body_widget, text_area);
             } else if self.image_renderer.is_some() {
                 // Image not cached, load image and skip rendering for current draw call
                 if let Some(ref post_ogp) = post.ogp {
@@ -163,7 +165,7 @@ impl Component for BlogPosts {
                     self.in_post.0 = Some(img);
                 } else {
                     frame.render_widget(
-                        post_content_text,
+                        post_body_widget,
                         Rect::new(area.x + 1, area.y + 1, area.width, area.height),
                     );
                 }
@@ -182,7 +184,7 @@ impl Component for BlogPosts {
                 );
 
                 frame.render_widget(
-                    post_content_text,
+                    post_body_widget,
                     Rect::new(area.x + 3, area.y + 3, area.width, area.height),
                 );
             }
