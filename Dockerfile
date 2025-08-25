@@ -13,7 +13,7 @@ COPY --from=install /temp/dev/vendor /temp/dev/.cargo .
 COPY . .
 RUN cargo build --release --no-default-features --features $CARGO_FEATURES
 
-FROM base AS runner
+FROM scratch AS runner
 USER runner
 EXPOSE 80/tcp 22/tcp
 COPY --from=builder /usr/src/app/target/release/ssh-portfolio /usr/local/bin/ssh-portfolio
