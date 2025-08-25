@@ -5,6 +5,7 @@ ARG CARGO_FEATURES="blog"
 FROM base AS install
 WORKDIR /temp/dev
 COPY Cargo.toml Cargo.lock .
+RUN mkdir src && touch src/lib.rs
 RUN mkdir .cargo && cargo vendor --locked >> .cargo/config.toml
 
 FROM base AS builder
