@@ -14,6 +14,7 @@ use crate::action::Action;
 use crate::components::Post;
 use crate::config::Config;
 
+#[allow(dead_code)]
 pub(super) fn truncate(s: &str, max: usize) -> String {
     s.char_indices()
         .find(|(idx, ch)| idx + ch.len_utf8() > max)

@@ -13,7 +13,7 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::tui::backend::SshBackend;
-use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
+use crate::tui::terminal::{TerminalInfo, TerminalKind};
 use crate::tui::{Terminal, Tui};
 use crate::OPTIONS;
 
@@ -215,6 +215,7 @@ impl Handler for SshSession {
         tracing::info!("PTY requested by terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
+        #[cfg(feature = "blog")]
         if pix_width != 0 && pix_height != 0 {
             self.terminal_info.write().await.set_font_size((
                 (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
@@ -224,7 +225,7 @@ impl Handler for SshSession {
             self.terminal_info
                 .write()
                 .await
-                .set_kind(TerminalKind::Unsupported(UnsupportedReason::Unsized));
+                .set_kind(TerminalKind::Unsupported(crate::tui::terminal::UnsupportedReason::Unsized));
         }
 
         if !term.contains("xterm") {
@@ -260,15 +261,20 @@ impl Handler for SshSession {
             .map_err(|_| eyre!("Failed to send event keystroke data"))
     }
 
+    #[instrument(skip_all, fields(channel_id = %_channel_id))]
     async fn window_change_request(
         &mut self,
-        _: ChannelId,
+        _channel_id: ChannelId,
         col_width: u32,
         row_height: u32,
         pix_width: u32,
         pix_height: u32,
         _: &mut Session,
     ) -> Result<(), Self::Error> {
+        tracing::info!("Terminal window resized by client, notifying components");
+        tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
+
+        #[cfg(feature = "blog")]
         self.terminal_info.write().await.set_font_size((
             (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
             (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,

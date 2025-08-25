@@ -21,6 +21,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=patches/");
 
+    #[cfg(feature = "blog")]
     patch_crate::run().expect("Failed while patching");
 
     // Generate openSSH host keys

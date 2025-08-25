@@ -1,16 +1,22 @@
 use std::default::Default;
 
 use default_variant::default;
-use ratatui_image::picker::{Capability, ProtocolType};
-use ratatui_image::FontSize;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
+#[cfg(feature = "blog")]
+use ratatui_image::{
+    picker::{Capability, ProtocolType},
+    FontSize,
+};
+
+#[cfg(feature = "blog")]
 pub const DEFAULT_FONT_SIZE: FontSize = (12, 12);
 
 #[derive(Debug, Default, Clone)]
 pub struct TerminalInfo {
     kind: TerminalKind,
+    #[cfg(feature = "blog")]
     font_size: Option<FontSize>,
 }
 
@@ -21,6 +27,7 @@ impl TerminalInfo {
     }
 
     /// Get the font size.
+    #[cfg(feature = "blog")]
     pub fn font_size(&self) -> FontSize {
         self.font_size.unwrap_or(DEFAULT_FONT_SIZE)
     }
@@ -33,6 +40,7 @@ impl TerminalInfo {
     }
 
     /// Sets the font size.
+    #[cfg(feature = "blog")]
     pub fn set_font_size(&mut self, font_size: FontSize) {
         self.font_size = Some(font_size);
     }
@@ -111,6 +119,7 @@ impl TerminalKind {
         Self::ALL_SUPPORTED.map(|term| term.to_string()).join(", ")
     }
 
+    #[cfg(feature = "blog")]
     pub fn capabilities(&self) -> Vec<Capability> {
         match *self {
             Self::Hyper | Self::Vscode => vec![Capability::RectangularOps],
@@ -130,6 +139,7 @@ impl TerminalKind {
         }
     }
 
+    #[cfg(feature = "blog")]
     pub fn as_protocol(&self) -> ProtocolType {
         if matches!(
             self,

@@ -252,11 +252,10 @@ impl App {
                 Action::Tick => {
                     self.last_tick_key_events.drain(..);
                 }
-                Action::Quit => {
-                    if !self.blog_posts.try_lock()?.is_in_post() {
-                        self.should_quit = true;
-                    }
-                }
+                #[cfg(feature = "blog")]
+                Action::Quit => self.should_quit = !self.blog_posts.try_lock()?.is_in_post(),
+                #[cfg(not(feature = "blog"))]
+                Action::Quit => self.should_quit = true,
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
