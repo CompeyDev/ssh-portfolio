@@ -4,7 +4,8 @@ ARG CARGO_FEATURES="blog"
 
 FROM base AS install
 WORKDIR /temp/dev
-COPY Cargo.toml Cargo.lock .
+COPY patches/ Cargo.toml Cargo.lock .
+RUN cargo install patch-crate --locked && cargo patch-crate
 RUN mkdir src && touch src/lib.rs
 RUN mkdir .cargo && cargo vendor --locked >> .cargo/config.toml
 
