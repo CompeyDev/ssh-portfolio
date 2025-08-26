@@ -22,7 +22,12 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=patches/");
 
     #[cfg(feature = "blog")]
-    patch_crate::run().expect("Failed while patching");
+    {
+        println!("cargo:rerun-if-env-changed=SKIP_PATCH_CRATE");
+        if env::var("SKIP_PATCH_CRATE").is_err() {
+            patch_crate::run().expect("Failed while patching");
+        }
+    }
 
     // Generate openSSH host keys
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
