@@ -1,0 +1,4 @@
+Dockerfile
+target/
+node_modules/
+/www/build
