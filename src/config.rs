@@ -1,18 +1,19 @@
 #![allow(dead_code)] // Remove this once you start using the code
 
 use std::collections::HashMap;
-use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
+use std::{env, io};
 
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
-use directories::ProjectDirs;
+use directories::{ProjectDirs, UserDirs};
 use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
-use serde::de::Deserializer;
-use serde::Deserialize;
-use tracing::error;
+use serde::{de::Deserializer, Deserialize};
+use ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey};
+use tracing::{debug, error, info, info_span};
 
 use crate::action::Action;
 use crate::app::Mode;
@@ -31,6 +32,8 @@ pub struct AppConfig {
 pub struct Config {
     #[serde(default, flatten)]
     pub config: AppConfig,
+    #[serde(default, deserialize_with = "private_key_deserialize")]
+    pub private_keys: Vec<PrivateKey>,
     #[serde(default)]
     pub keybindings: KeyBindings,
     #[serde(default)]
@@ -39,9 +42,9 @@ pub struct Config {
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
-    pub static ref DATA_FOLDER: Option<PathBuf> =
+    pub static ref DATA_DIR: Option<PathBuf> =
         env::var(format!("{}_DATA", PROJECT_NAME.clone())).ok().map(PathBuf::from);
-    pub static ref CONFIG_FOLDER: Option<PathBuf> =
+    pub static ref CONFIG_DIR: Option<PathBuf> =
         env::var(format!("{}_CONFIG", PROJECT_NAME.clone())).ok().map(PathBuf::from);
 }
 
@@ -50,6 +53,10 @@ impl Config {
         let default_config: Config = json5::from_str(CONFIG).unwrap();
         let data_dir = get_data_dir();
         let config_dir = get_config_dir();
+
+        info!("Using data directory: {}", data_dir.display());
+        info!("Using config directory: {}", config_dir.display());
+
         let mut builder = config::Config::builder()
             .set_default("data_dir", data_dir.to_str().unwrap())?
             .set_default("config_dir", config_dir.to_str().unwrap())?;
@@ -88,13 +95,18 @@ impl Config {
                 user_styles.entry(style_key.clone()).or_insert(*style);
             }
         }
+        if cfg.private_keys.is_empty() {
+            for key in default_config.private_keys {
+                cfg.private_keys.push(key);
+            }
+        }
 
         Ok(cfg)
     }
 }
 
 pub fn get_data_dir() -> PathBuf {
-    let directory = if let Some(s) = DATA_FOLDER.clone() {
+    let directory = if let Some(s) = DATA_DIR.clone() {
         s
     } else if let Some(proj_dirs) = project_directory() {
         proj_dirs.data_local_dir().to_path_buf()
@@ -105,7 +117,7 @@ pub fn get_data_dir() -> PathBuf {
 }
 
 pub fn get_config_dir() -> PathBuf {
-    let directory = if let Some(s) = CONFIG_FOLDER.clone() {
+    let directory = if let Some(s) = CONFIG_DIR.clone() {
         s
     } else if let Some(proj_dirs) = project_directory() {
         proj_dirs.config_local_dir().to_path_buf()
@@ -116,7 +128,60 @@ pub fn get_config_dir() -> PathBuf {
 }
 
 fn project_directory() -> Option<ProjectDirs> {
-    ProjectDirs::from("com", "kdheepak", env!("CARGO_PKG_NAME"))
+    ProjectDirs::from("xyz", "devcomp", env!("CARGO_PKG_NAME"))
+}
+
+fn private_key_deserialize<'de, D>(deserializer: D) -> Result<Vec<PrivateKey>, D::Error>
+where
+    D: Deserializer<'de>, {
+    let keys = HashMap::<String, String>::deserialize(deserializer)?
+        .into_iter()
+        .map(|(pem_type, pem_or_path)| {
+            debug!("Loading {} private key", pem_type);
+            PrivateKey::from_openssh(pem_or_path.as_bytes()).or_else(|_| {
+                debug!("Failed to parse {} PEM from string, trying as file path", pem_type);
+
+                let ud = UserDirs::new().ok_or(ssh_key::Error::Io(io::ErrorKind::NotFound))?;
+                let expanded_path = PathBuf::from(&*shellexpand::full_with_context_no_errors(
+                    &pem_or_path,
+                    || ud.home_dir().to_str(),
+                    |var| match var {
+                        "DATA_DIR" => get_data_dir().to_str().map(|s| s.to_string()),
+                        "CONFIG_DIR" => get_config_dir().to_str().map(|s| s.to_string()),
+                        "HOME" => Some(String::from("~")),
+                        _ => None,
+                    },
+                ));
+
+                if !expanded_path.exists() {
+                    let span = info_span!("host_keygen", algo = %pem_type, path = %expanded_path.display());
+                    let _lock = span.enter();
+
+                    if let Some(parent) = expanded_path.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+
+                    info!("Generating key... (this may take a while)");
+                    let algo = Algorithm::from_str(&pem_type)?;
+                    let key = PrivateKey::random(&mut rand_core::OsRng, algo.to_owned())?;
+                    key.write_openssh_file(&expanded_path, LineEnding::default())?;
+                    
+                    return Ok(key);
+                }
+
+                PrivateKey::read_openssh_file(&expanded_path)
+            })
+        })
+        .collect::<Result<Vec<PrivateKey>, ssh_key::Error>>()
+        .map_err(serde::de::Error::custom)
+        .inspect_err(|err| error!("Loading private keys error: {}", err))?;
+
+    if keys.is_empty() {
+        return Err(serde::de::Error::custom("No valid private keys found in configuration"))
+            .inspect_err(|err| error!("{}", err));
+    }
+
+    Ok(keys)
 }
 
 #[derive(Clone, Debug, Default, Deref, DerefMut)]

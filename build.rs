@@ -1,19 +1,12 @@
 use std::env;
-use std::path::PathBuf;
 
 use anyhow::Result;
-use ssh_key::{rand_core, Algorithm, EcdsaCurve, LineEnding, PrivateKey};
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder};
 
 #[cfg(feature = "blog")]
 const ATPROTO_LEXICON_DIR: &str = "src/atproto/lexicons";
 #[cfg(feature = "blog")]
 const ATPROTO_CLIENT_DIR: &str = "src/atproto";
-const SSH_KEY_ALGOS: &[(&str, Algorithm)] = &[
-    ("rsa.pem", Algorithm::Rsa { hash: None }),
-    ("ed25519.pem", Algorithm::Ed25519),
-    ("ecdsa.pem", Algorithm::Ecdsa { curve: EcdsaCurve::NistP256 }),
-];
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
@@ -27,24 +20,6 @@ fn main() -> Result<()> {
         if env::var("SKIP_PATCH_CRATE").is_err() {
             patch_crate::run().expect("Failed while patching");
         }
-    }
-
-    // Generate openSSH host keys
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let mut rng = rand_core::OsRng;
-    for (file_name, algo) in SSH_KEY_ALGOS {
-        let path = out_dir.join(file_name);
-        if path.exists() {
-            println!(
-                "cargo:warning=Skipping existing host key: {:?}",
-                path.file_stem().unwrap()
-            );
-            continue;
-        }
-
-        let key =
-            PrivateKey::random(&mut rng, algo.to_owned()).map_err(anyhow::Error::from)?;
-        key.write_openssh_file(&path, LineEnding::default())?;
     }
 
     // Generate ATProto client with lexicon validation

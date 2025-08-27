@@ -5,8 +5,7 @@ use cli::Cli;
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
 use lazy_static::lazy_static;
-use russh::keys::PrivateKey;
-use russh::server::Config;
+use russh::server::Config as SshConfig;
 use russh::MethodSet;
 use ssh::SshServer;
 
@@ -14,7 +13,9 @@ use ssh::SshServer;
 pub(crate) use atproto::com;
 #[cfg(feature = "blog")]
 pub(crate) use atrium_api::*;
+use tracing::instrument;
 
+use crate::config::Config;
 use crate::landing::WebLandingServer;
 
 mod action;
@@ -31,14 +32,9 @@ mod logging;
 mod ssh;
 mod tui;
 
-const SSH_KEYS: &[&[u8]] = &[
-    include_bytes!(concat!(env!("OUT_DIR"), "/rsa.pem")),
-    include_bytes!(concat!(env!("OUT_DIR"), "/ecdsa.pem")),
-    include_bytes!(concat!(env!("OUT_DIR"), "/ed25519.pem")),
-];
-
 #[rustfmt::skip]
 lazy_static! {
+    pub(crate) static ref CONFIG: Config = Config::new().expect("Config loading error, see above");
     pub(crate) static ref OPTIONS: Cli = Cli::parse();
     pub(crate) static ref SSH_SOCKET_ADDR: Option<SocketAddr> = Some(SocketAddr::from((host_ip().ok()?, OPTIONS.ssh_port)));
     pub(crate) static ref WEB_SERVER_ADDR: Option<SocketAddr> = Some(SocketAddr::from((host_ip().ok()?, OPTIONS.web_port)));
@@ -53,8 +49,9 @@ async fn main() -> Result<()> {
     let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
 
+    let ssh_config = tokio::task::block_in_place(ssh_config);
     tokio::select! {
-        ssh_res = SshServer::start(ssh_socket_addr, ssh_config()) => ssh_res,
+        ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
         web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err)),
     }
 }
@@ -75,17 +72,15 @@ pub fn host_ip() -> Result<[u8; 4]> {
     .map_err(|_| eyre!("Invalid host IP provided"))
 }
 
-fn ssh_config() -> Config {
-    let conf = Config {
+#[instrument]
+fn ssh_config() -> SshConfig {
+    let conf = SshConfig {
         methods: MethodSet::NONE,
-        keys: SSH_KEYS
-            .to_vec()
-            .iter()
-            .filter_map(|pem| PrivateKey::from_openssh(pem).ok())
-            .collect(),
+        keys: CONFIG.private_keys.clone(),
         ..Default::default()
     };
 
-    tracing::trace!("SSH config: {:#?}", conf);
+    tracing::info!("SSH will use {} host keys", conf.keys.len());
+    tracing::trace!("SSH config: {:?}", conf);
     conf
 }

@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::action::Action;
-use crate::components::*;
+use crate::{components::*, CONFIG};
 use crate::config::Config;
 use crate::keycode::KeyCodeExt;
 use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
@@ -90,7 +90,7 @@ impl App {
             should_suspend: false,
             needs_resize: false,
 
-            config: Config::new()?,
+            config: CONFIG.clone(),
             mode: Mode::Home,
             last_tick_key_events: Vec::new(),
             action_tx,

@@ -1,4 +1,11 @@
 {
+  // Paths to SSH private keys to use for encryption
+  "private_keys": {
+    "ssh-rsa": "$DATA_DIR/ssh/id_rsa",
+    "ecdsa-sha2-nistp256": "$DATA_DIR/ssh/id_ecdsa",
+    "ssh-ed25519": "$DATA_DIR/ssh/id_ed25519"
+  },
+
   "keybindings": {
     "Home": {
       "<q>": "Quit", // Quit the application
