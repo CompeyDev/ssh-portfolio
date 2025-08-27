@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import { crossfade, fade } from 'svelte/transition';
 
-	const command = 'ssh devcomp.xyz';
+	const command = 'ssh -o SendEnv=TERM_PROGRAM devcomp.xyz';
 	const cursor = '█'
 
 	let showCheckmark = $state(false);
