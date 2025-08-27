@@ -25,7 +25,8 @@ RUN mkdir src \
   && touch src/lib.rs \
   && echo "fn main() {}" > build.rs \
   && cargo patch-crate \
-  && cargo build --locked --release --no-default-features --features $CARGO_FEATURES
+  && cargo build --locked --release --no-default-features --features $CARGO_FEATURES \
+  && strip ./target/release/ssh-portfolio
 
 COPY . .
 COPY --from=www /usr/src/www/build www/build
