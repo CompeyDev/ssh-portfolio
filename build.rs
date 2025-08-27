@@ -1,5 +1,3 @@
-use std::env;
-
 use anyhow::Result;
 use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder};
 
@@ -12,12 +10,12 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/atproto/lexicons");
     println!("cargo:rerun-if-changed=Cargo.toml");
-    println!("cargo:rerun-if-changed=patches/");
 
     #[cfg(feature = "blog")]
     {
+        println!("cargo:rerun-if-changed=patches/");
         println!("cargo:rerun-if-env-changed=SKIP_PATCH_CRATE");
-        if env::var("SKIP_PATCH_CRATE").is_err() {
+        if std::env::var("SKIP_PATCH_CRATE").is_err() {
             patch_crate::run().expect("Failed while patching");
         }
     }
