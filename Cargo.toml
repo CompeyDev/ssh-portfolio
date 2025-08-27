@@ -3,6 +3,7 @@ name = "ssh-portfolio"
 version = "0.1.0"
 edition = "2021"
 description = "no"
+repository = "https://git.devcomp.xyz/DevComp/ssh-portfolio"
 authors = ["Erica Marigold <hi@devcomp.xyz>"]
 build = "build.rs"
 
