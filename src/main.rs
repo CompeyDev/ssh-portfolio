@@ -51,10 +51,27 @@ async fn main() -> Result<()> {
     let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
 
-    let ssh_config = tokio::task::block_in_place(ssh_config);
-    tokio::select! {
-        ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
-        web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err)),
+    let local_set = tokio::task::LocalSet::new();
+    loop {
+        let task = local_set.run_until(async { 
+            tokio::task::spawn_local(async move {
+                let ssh_config = ssh_config();
+                tokio::select! {
+                    ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
+                    web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err))
+                }
+            }).await
+        });
+
+        match task.await {
+            Ok(res) => break res,
+            Err(err) => {
+                if err.is_panic() {
+                    tracing::error!("Application panicked, recovering...");
+                    std::panic::resume_unwind(err.into_panic());
+                }
+            }
+        }
     }
 }
 
