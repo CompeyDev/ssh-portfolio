@@ -1,3 +1,5 @@
+#![feature(optimize_attribute)]
+
 use std::net::SocketAddr;
 
 use clap::Parser as _;

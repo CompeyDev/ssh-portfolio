@@ -131,6 +131,7 @@ fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("xyz", "devcomp", env!("CARGO_PKG_NAME"))
 }
 
+#[optimize(speed)]
 fn private_key_deserialize<'de, D>(deserializer: D) -> Result<Vec<PrivateKey>, D::Error>
 where
     D: Deserializer<'de>, {

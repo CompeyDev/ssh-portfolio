@@ -7,8 +7,23 @@ repository = "https://git.devcomp.xyz/DevComp/ssh-portfolio"
 authors = ["Erica Marigold <hi@devcomp.xyz>"]
 build = "build.rs"
 
+# Taken from https://github.com/microsoft/edit/blob/a3a6f5f/Cargo.toml#L20-L31
+# We use `opt-level = "s"` as it significantly reduces binary size.
+# We could then use the `#[optimize(speed)]` attribute for spot optimizations.
+# Unfortunately, that attribute currently doesn't work on intrinsics such as memset.
+[profile.release]
+codegen-units = 1           # Reduces binary size by ~2%
+debug = "full"              # No one needs an undebuggable release binary
+lto = true                  # Reduces binary size by ~14%
+opt-level = "s"             # Reduces binary size by ~25%
+split-debuginfo = "packed"  # Generates a separate *.dwp/*.dSYM so the binary can get stripped
+strip = "symbols"           # See split-debuginfo - allows us to drop the size by ~65%
+
+[profile.dev]
+opt-level = 2               # Optimize more than default, see https://github.com/RustCrypto/RSA/issues/144
+incremental = true          # Improves re-compile times
+
 [features]
-# TODO: CLI feature
 default = ["blog"]
 blog = [
     # Main deps
@@ -27,9 +42,6 @@ blog = [
     "dep:atrium-codegen",
     "dep:patch-crate"
 ]
-
-[profile.dev]
-opt-level = 2
 
 [package.metadata.patch]
 crates = ["ratatui-image"]

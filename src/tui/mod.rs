@@ -111,6 +111,7 @@ impl Tui {
         });
     }
 
+    #[optimize(speed)]
     async fn event_loop(
         status: Arc<RwLock<TuiStatus>>,
         event_tx: UnboundedSender<Event>,

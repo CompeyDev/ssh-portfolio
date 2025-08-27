@@ -32,6 +32,7 @@ impl TermWriter {
         Self { session, channel, inner: CryptoVec::new() }
     }
 
+    #[optimize(speed)]
     fn flush_inner(&mut self) -> std::io::Result<()> {
         let handle = TokioHandle::current();
         handle.block_on(async move {
@@ -50,6 +51,7 @@ impl TermWriter {
 
 impl Write for TermWriter {
     #[instrument(skip(self, buf), level = "debug")]
+    #[optimize(speed)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
         self.inner.extend(buf);
@@ -57,6 +59,7 @@ impl Write for TermWriter {
     }
 
     #[instrument(skip(self), level = "trace")]
+    #[optimize(speed)]
     fn flush(&mut self) -> std::io::Result<()> {
         tracing::trace!("Flushing SSH terminal writer buffer");
         tokio::task::block_in_place(|| self.flush_inner())

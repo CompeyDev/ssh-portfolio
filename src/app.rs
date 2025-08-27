@@ -107,6 +107,7 @@ impl App {
         })
     }
 
+    #[optimize(speed)]
     pub async fn run(
         &mut self,
         term: Arc<Mutex<Terminal>>,

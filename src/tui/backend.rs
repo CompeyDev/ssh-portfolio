@@ -35,6 +35,7 @@ impl Backend for SshBackend {
         Ok(Size { width: self.dims.0, height: self.dims.1 })
     }
 
+    #[optimize(speed)]
     fn draw<'a, I>(&mut self, content: I) -> io::Result<()>
     where
         I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>, {
@@ -71,6 +72,7 @@ impl Backend for SshBackend {
         })
     }
 
+    #[optimize(speed)]
     fn flush(&mut self) -> io::Result<()> {
         Backend::flush(&mut self.inner)
     }
