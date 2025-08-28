@@ -51,16 +51,13 @@ async fn main() -> Result<()> {
     let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
 
-    let local_set = tokio::task::LocalSet::new();
     loop {
-        let task = local_set.run_until(async { 
-            tokio::task::spawn_local(async move {
-                let ssh_config = ssh_config();
-                tokio::select! {
-                    ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
-                    web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err))
-                }
-            }).await
+        let task = tokio::task::spawn(async move {
+            let ssh_config = ssh_config();
+            tokio::select! {
+                ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
+                web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err))
+            }
         });
 
         match task.await {
