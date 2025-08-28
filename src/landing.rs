@@ -34,7 +34,7 @@ impl WebLandingServer {
                     .on_response(
                         |res: &axum::response::Response<_>,
                          latency: std::time::Duration,
-                         _span: &Span| {
+                         _span: &tracing::Span| {
                             let status = res.status();
                             tracing::info!(
                                 status = %status,
