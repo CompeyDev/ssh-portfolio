@@ -178,7 +178,7 @@ impl Handler for SshSession {
         Err(eyre!("Failed to initialize App for session"))
     }
 
-    #[instrument(level = "debug", skip(self, _session), fields(channel_id = %_channel_id))]
+    #[instrument(skip(self, _session), fields(channel_id = %_channel_id))]
     async fn env_request(
         &mut self,
         _channel_id: ChannelId,
@@ -295,9 +295,10 @@ impl Handler for SshSession {
 pub struct SshServer;
 
 impl SshServer {
-    #[instrument(level = "trace")]
+    #[instrument(skip(config), name = "ssh")]
     pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
         let listener = TcpListener::bind(addr).await?;
+        tracing::info!("SSH server listening!");
 
         Self.run_on_socket(Arc::new(config), &listener).await.map_err(|err| eyre!(err))
     }

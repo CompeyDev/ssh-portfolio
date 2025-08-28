@@ -13,7 +13,7 @@ use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{de::Deserializer, Deserialize};
 use ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey};
-use tracing::{debug, error, info, info_span};
+use tracing::{debug, error, info, info_span, warn};
 
 use crate::action::Action;
 use crate::app::Mode;
@@ -54,8 +54,8 @@ impl Config {
         let data_dir = get_data_dir();
         let config_dir = get_config_dir();
 
-        info!("Using data directory: {}", data_dir.display());
-        info!("Using config directory: {}", config_dir.display());
+        debug!("Using data directory: {}", data_dir.display());
+        debug!("Using config directory: {}", config_dir.display());
 
         let mut builder = config::Config::builder()
             .set_default("data_dir", data_dir.to_str().unwrap())?
@@ -78,7 +78,7 @@ impl Config {
             }
         }
         if !found_config {
-            error!("No configuration file found. Application may not behave as expected");
+            warn!("No configuration file found. Application may not behave as expected");
         }
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;

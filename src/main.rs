@@ -43,10 +43,13 @@ lazy_static! {
 }
 
 #[tokio::main]
+#[instrument(name = "main")]
 async fn main() -> Result<()> {
     crate::errors::init()?;
     crate::logging::init()?;
     let _ = *OPTIONS; // force clap to run by evaluating it
+
+    eprintln!(" {} v{}\n", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
     let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
@@ -88,7 +91,7 @@ pub fn host_ip() -> Result<[u8; 4]> {
     .map_err(|_| eyre!("Invalid host IP provided"))
 }
 
-#[instrument]
+#[instrument(name = "config")]
 fn ssh_config() -> SshConfig {
     let conf = SshConfig {
         methods: MethodSet::NONE,
@@ -96,7 +99,7 @@ fn ssh_config() -> SshConfig {
         ..Default::default()
     };
 
-    tracing::info!("SSH will use {} host keys", conf.keys.len());
+    tracing::debug!("SSH will use {} host keys", conf.keys.len());
     tracing::trace!("SSH config: {:?}", conf);
     conf
 }
