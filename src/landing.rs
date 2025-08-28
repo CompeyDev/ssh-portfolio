@@ -8,7 +8,6 @@ use axum::routing::get;
 use axum::Router;
 use rust_embed::Embed;
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
 use tracing::instrument;
 
 #[derive(Embed)]
@@ -16,15 +15,39 @@ use tracing::instrument;
 pub struct WebLandingServer;
 
 impl WebLandingServer {
-    #[instrument(level = "trace")]
+    #[instrument(name = "web")]
     pub async fn start(addr: SocketAddr) -> io::Result<()> {
         let app = Router::new()
             .route("/", get(handle_index))
             .route("/{*path}", get(handle_static_file))
-            .layer(TraceLayer::new_for_http());
+            .layer({
+                let layer = tower_http::trace::TraceLayer::new_for_http();
+                #[cfg(not(debug_assertions))]
+                let layer = layer
+                    .make_span_with(move |req: &axum::extract::Request<_>| {
+                        let method = req.method().clone();
+                        let path = req.uri().path().to_owned();
+
+                        tracing::info_span!("web", method = %method, path = %path)
+                    })
+                    .on_request(())
+                    .on_response(
+                        |res: &axum::response::Response<_>,
+                         latency: std::time::Duration,
+                         _span: &Span| {
+                            let status = res.status();
+                            tracing::info!(
+                                status = %status,
+                                latency = ?latency,
+                            );
+                        },
+                    );
+
+                layer
+            });
 
         let listener = TcpListener::bind(addr).await?;
-        tracing::info!("Web server listening on {}", addr);
+        tracing::info!("Web server listening!");
 
         axum::serve(listener, app).await?;
         Ok(())
