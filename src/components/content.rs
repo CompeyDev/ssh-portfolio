@@ -28,6 +28,8 @@ pub struct Content {
     selected_tab: Arc<AtomicUsize>,
 }
 
+// TODO: Use layouts and make this ugly
+
 impl Content {
     pub fn new(selected_tab: Arc<AtomicUsize>) -> Self {
         Self { selected_tab, ..Default::default() }
@@ -60,14 +62,36 @@ impl Content {
                         ),
                         Span::from("), and I make scalable systems or something. IDFK."),
                     ]);
+                } else if pos == lines.len() - 2 {
+                    return Line::from(vec![
+                        Span::from(" "),
+                        Span::from(line.clone()),
+                        Span::from("      "),
+                        //  hi@devcomp.xyz   @CompeyDev   @devcomp.xyz   @DevComp_
+                        Span::styled(" ", Style::default().fg(Color::Cyan)),
+                        Span::from("hi@devcomp.xyz"),
+                        Span::from("  "),
+
+                        Span::styled(" ", Style::default().fg(Color::LightMagenta)),
+                        Span::from("@CompeyDev"),
+                        Span::from("  "),
+
+                        Span::styled(" ", Style::default().fg(Color::Blue)),
+                        Span::from("@devcomp.xyz"),
+                        Span::from("  "),
+
+                        Span::styled(" ", Style::default().fg(Color::LightBlue)),
+                        Span::from("@DevComp_"),
+                    ]).add_modifier(Modifier::BOLD);
                 }
+
                 Line::raw(format!(" {}", line))
                     .style(Style::default().add_modifier(Modifier::BOLD))
             })
             .collect::<Vec<Line<'static>>>();
 
         content.extend(vec![
-            Line::from(""),
+            Line::default(),
             Line::from(vec![
                 Span::from(" "),
                 Span::from("I specialize in systems programming, primarily in "),
