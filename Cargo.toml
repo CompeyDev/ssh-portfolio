@@ -17,7 +17,6 @@ debug = "full"              # No one needs an undebuggable release binary
 lto = true                  # Reduces binary size by ~14%
 opt-level = "s"             # Reduces binary size by ~25%
 split-debuginfo = "packed"  # Generates a separate *.dwp/*.dSYM so the binary can get stripped
-strip = "symbols"           # See split-debuginfo - allows us to drop the size by ~65%
 
 [profile.dev]
 opt-level = 2               # Optimize more than default, see https://github.com/RustCrypto/RSA/issues/144
