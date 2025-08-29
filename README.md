@@ -15,6 +15,9 @@ try it out:
 ssh -o SendEnv=TERM_PROGRAM erica@devcomp.xyz
 ```
 
+> [!TIP]
+> make sure you have a [nerd font](https://www.nerdfonts.com/) installed or some features may not work!
+
 ## features
 
 - about & projects tab 
