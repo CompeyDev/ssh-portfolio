@@ -7,7 +7,7 @@
 <svelte:head>
 	<title>devcomp.xyz</title>
 	<link rel="icon" href="/favicon.png" />
-	<meta content="ssh devcomp.xyz" property="og:title" />
+	<meta content="compey's ssh home" property="og:title" />
 	<meta content="#B59BFD" data-react-helmet="true" name="theme-color" />
 </svelte:head>
 
