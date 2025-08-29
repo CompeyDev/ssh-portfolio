@@ -17,7 +17,8 @@ RUN apk add --no-cache \
   openssl-dev \
   openssl-libs-static \
   zlib-dev \
-  zlib-static
+  zlib-static \
+  shadow
 RUN cargo install patch-crate --locked
 
 ARG CARGO_FEATURES="blog"
@@ -40,7 +41,7 @@ RUN touch build.rs \
   && strip ./target/release/ssh-portfolio
 
 # Create a user without root permissions
-RUN useradd --uid 1000 --no-create-home runner
+RUN adduser -u 1000 runner
 
 # --- Runner layer ---
 FROM scratch AS runner
