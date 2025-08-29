@@ -52,10 +52,9 @@ FROM scratch AS runner
 # De-escalate priveleges to non-root user
 COPY --from=builder /home/runner /home/runner
 COPY --from=builder /etc/passwd /etc/passwd
-USER 1000
-
-# Copy compiled binary over
 COPY --from=builder /usr/local/bin/ssh-portfolio /usr/local/bin/ssh-portfolio
+RUN chown runner:runner /home/runner  
+USER runner
 
 # Start server
 EXPOSE 80/tcp 22/tcp
