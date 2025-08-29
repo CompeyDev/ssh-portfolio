@@ -39,20 +39,23 @@ COPY . .
 COPY --from=www /usr/src/www/build www/build
 RUN touch build.rs \
   && SKIP_PATCH_CRATE=1 cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
-  && strip ./target/release/ssh-portfolio
+  && strip ./target/release/ssh-portfolio \
+  && cp ./target/release/ssh-portfolio /usr/local/bin/ # must be moved to a secure path to preserve caps
 
 # Create a user without root permissions & set binary capabilities
 RUN adduser -u 1000 --disabled-password runner
-RUN setcap CAP_NET_BIND_SERVICE=+eip ./target/release/ssh-portfolio
+RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/ssh-portfolio
 
 # --- Runner layer ---
 FROM scratch AS runner
 
 # De-escalate priveleges to non-root user
 COPY --from=builder /home/runner /home/runner
-COPY --from=builder /usr/src/app/target/release/ssh-portfolio /usr/local/bin/ssh-portfolio
 COPY --from=builder /etc/passwd /etc/passwd
 USER 1000
+
+# Copy compiled binary over
+COPY --from=builder /usr/local/bin/ssh-portfolio /usr/local/bin/ssh-portfolio
 
 # Start server
 EXPOSE 80/tcp 22/tcp
