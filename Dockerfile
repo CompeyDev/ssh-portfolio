@@ -41,7 +41,7 @@ RUN touch build.rs \
   && strip ./target/release/ssh-portfolio
 
 # Create a user without root permissions
-RUN adduser -u 1000 runner
+RUN adduser -u 1000 --disabled-password runner
 
 # --- Runner layer ---
 FROM scratch AS runner
