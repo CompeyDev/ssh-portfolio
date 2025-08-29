@@ -17,6 +17,7 @@ use crate::tui::Event;
 //
 #[cfg(feature = "blog")]
 mod blog;
+mod cards;
 mod cat;
 mod content;
 #[cfg(feature = "blog")]
@@ -25,6 +26,7 @@ mod tabs;
 
 #[cfg(feature = "blog")]
 pub use blog::*;
+pub use cards::*;
 pub use cat::*;
 pub use content::*;
 #[cfg(feature = "blog")]

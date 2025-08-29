@@ -10,6 +10,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::Component;
 use crate::action::Action;
+use crate::components::Card;
 #[cfg(feature = "blog")]
 use crate::components::Post;
 use crate::config::Config;
@@ -71,18 +72,16 @@ impl Content {
                         Span::styled(" ", Style::default().fg(Color::Cyan)),
                         Span::from("hi@devcomp.xyz"),
                         Span::from("  "),
-
                         Span::styled(" ", Style::default().fg(Color::LightMagenta)),
                         Span::from("@CompeyDev"),
                         Span::from("  "),
-
                         Span::styled(" ", Style::default().fg(Color::Blue)),
                         Span::from("@devcomp.xyz"),
                         Span::from("  "),
-
                         Span::styled(" ", Style::default().fg(Color::LightBlue)),
                         Span::from("@DevComp_"),
-                    ]).add_modifier(Modifier::BOLD);
+                    ])
+                    .add_modifier(Modifier::BOLD);
                 }
 
                 Line::raw(format!(" {}", line))
@@ -129,8 +128,7 @@ impl Content {
             ),
             (
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-                "pesde-pkg/pesde: A package manager for the Luau programming language, \
-                 supporting multiple runtimes including Roblox and Lune",
+                "pesde-pkg/pesde: A multi-runtime package manager for the Luau programming language",
             ),
         ];
 
@@ -212,8 +210,33 @@ impl Content {
     }
 
     /// Generate the content for the "Projects" tab
-    fn projects_content(&self) -> Vec<Line<'static>> {
-        vec![Line::from("WIP")]
+    #[rustfmt::skip]
+    fn projects_content(&self) -> Vec<Card<'static>> {
+        vec![
+            Card { title: " 0x5eal/luau-unzip", description: "Unzip implementation in pure Luau" },
+            Card {
+                title: " CompeyDev/discord-status-action",
+                description: "GitHub action to update your discord status in a file using the Lanyard API",
+            },
+            Card { title: " CompeyDev/bad-apple-efi", description: "An EFI application to play the silly video" },
+            Card { title: " CompeyDev/lei", description: "🌸 A collection of Go bindings to Luau" },
+            Card { title: " 0x5eal/wg-lua", description: "A Lua implementation of the wireguard keygen algorithm" },
+            Card { title: " 0x5eal/semver-luau", description: "Strongly typed semver parser for Luau" },
+            Card { title: " CompeyDev/elytra-lock-fabric", description: "Client-side fabric mod to lock elytra usage using a keybind" },
+            Card { 
+                title: " CompeyDev/touch-grass-reminder",
+                description: "Client-side quilt mod which warns players when they have been excessively playing Minecraft"
+            },
+            Card {
+                title: " CompeyDev/stinky-mod",
+                description: "Server-side fabric mod featuring (mostly) customizable randomized join, leave, death, and MOTD messages",
+            },
+            Card { title: " CompeyDev/lune-luau-template", description: "A simple template for initializing Luau projects with Lune" },
+            Card { title: " CompeyDev/frktest-pesde", description: "A basic test framework for Lune (now with pesde support!)" },
+            Card { title: " CompeyDev/cull-less-leaves", description: "1.21 release fork | Cull leaves while looking hot!" },
+            Card { title: " CompeyDev/setup-rokit", description: "GitHub action to install and run rokit; a toolchain manager" },
+            Card { title: " CompeyDev/fxtwitter-docker", description: "Dockerified fork of fxtwitter | Fix broken Twitter/X embeds!" },
+        ]
     }
 
     /// Generate the content for the "Blog" tab
@@ -249,12 +272,6 @@ impl Component for Content {
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         let selected_tab = self.selected_tab.load(Ordering::Relaxed);
-        let content = match selected_tab {
-            0 => self.about_content(area)?,
-            1 => self.projects_content(),
-            /* Blog tab handled in `App::render` */
-            _ => vec![],
-        };
 
         // Create the border lines
         let mut border_top = Line::default();
@@ -303,19 +320,21 @@ impl Component for Content {
         let border_right = Span::styled("│", Style::default().fg(Color::DarkGray));
 
         // Render the content
-        let content_widget = Paragraph::new(content)
-            .block(Block::default().borders(Borders::NONE))
-            .wrap(Wrap { trim: false });
+        let content_area = Rect {
+            x: area.x + 3,
+            y: area.y + 2,
+            width: area.width - 6,
+            height: area.height - 6,
+        };
 
-        frame.render_widget(
-            content_widget,
-            Rect {
-                x: area.x + 1,
-                y: area.y + 1,
-                width: area.width - 2,
-                height: area.height - 2,
-            },
-        );
+        if selected_tab == 0 {
+            let widget = Paragraph::new(self.about_content(area)?)
+                .block(Block::default().borders(Borders::NONE))
+                .wrap(Wrap { trim: false });
+            frame.render_widget(widget, content_area);
+        } else if selected_tab == 1 {
+            self.projects_content().draw(frame, content_area)?;
+        } // FIXME: Blog tab handled in `App::render`
 
         // Render the borders
         frame.render_widget(

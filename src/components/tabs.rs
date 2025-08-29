@@ -10,6 +10,8 @@ use super::Component;
 use crate::action::Action;
 use crate::config::Config;
 
+// TODO: Clean the border drawing logic up into its own component
+
 #[derive(Default)]
 pub struct Tabs {
     command_tx: Option<UnboundedSender<Action>>,
