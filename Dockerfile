@@ -32,9 +32,14 @@ COPY . .
 COPY --from=www /usr/src/www/build www/build
 RUN touch build.rs \
   && SKIP_PATCH_CRATE=1 cargo build --locked --release --no-default-features --features $CARGO_FEATURES
+RUN useradd --uid 1000 --no-create-home runner
 
 FROM scratch AS runner
-EXPOSE 80/tcp 22/tcp
+
 COPY --from=builder /usr/src/app/target/release/ssh-portfolio /usr/local/bin/ssh-portfolio
+COPY --from=builder /etc/passwd /etc/passwd
+USER 1000
+
+EXPOSE 80/tcp 22/tcp
 
 CMD ["/usr/local/bin/ssh-portfolio", "--host", "0.0.0.0"]
