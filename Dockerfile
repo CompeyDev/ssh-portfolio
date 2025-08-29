@@ -18,7 +18,8 @@ RUN apk add --no-cache \
   openssl-libs-static \
   zlib-dev \
   zlib-static \
-  shadow
+  shadow \
+  libcap-utils
 RUN cargo install patch-crate --locked
 
 ARG CARGO_FEATURES="blog"
@@ -40,8 +41,9 @@ RUN touch build.rs \
   && SKIP_PATCH_CRATE=1 cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
   && strip ./target/release/ssh-portfolio
 
-# Create a user without root permissions
+# Create a user without root permissions & set binary capabilities
 RUN adduser -u 1000 --disabled-password runner
+RUN setcap CAP_NET_BIND_SERVICE=+eip ./target/release/ssh-portfolio
 
 # --- Runner layer ---
 FROM scratch AS runner
