@@ -57,4 +57,5 @@ USER 1000
 
 # Start server
 EXPOSE 80/tcp 22/tcp
-CMD ["/usr/local/bin/ssh-portfolio", "--host", "0.0.0.0"]
+ENTRYPOINT /usr/local/bin/ssh-portfolio
+CMD ["--host", "0.0.0.0"]
