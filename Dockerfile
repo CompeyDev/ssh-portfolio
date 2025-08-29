@@ -50,10 +50,9 @@ RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/ssh-portfolio
 FROM scratch AS runner
 
 # De-escalate priveleges to non-root user
-COPY --from=builder /home/runner /home/runner
+COPY --from=builder --chown=runner:runner /home/runner /home/runner
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /usr/local/bin/ssh-portfolio /usr/local/bin/ssh-portfolio
-RUN chown runner:runner /home/runner  
 USER runner
 
 # Start server
