@@ -12,7 +12,7 @@ introducing a portfolio as a tui app served over ssh!
 try it out:
 
 ```sh
-ssh devcomp.xyz
+ssh -o SendEnv=TERM_PROGRAM erica@devcomp.xyz
 ```
 
 ## features
