@@ -26,12 +26,12 @@ RUN mkdir src \
   && echo "fn main() {}" > build.rs \
   && cargo patch-crate \
   && cargo build --locked --release --no-default-features --features $CARGO_FEATURES \
-  && strip ./target/release/ssh-portfolio
 
 COPY . .
 COPY --from=www /usr/src/www/build www/build
 RUN touch build.rs \
   && SKIP_PATCH_CRATE=1 cargo build --locked --release --no-default-features --features $CARGO_FEATURES
+  && strip ./target/release/ssh-portfolio
 RUN useradd --uid 1000 --no-create-home runner
 
 FROM scratch AS runner
