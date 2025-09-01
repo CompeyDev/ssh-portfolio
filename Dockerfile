@@ -19,26 +19,24 @@ RUN apk add --no-cache \
   zlib-dev \
   zlib-static \
   shadow \
-  libcap-utils
-RUN cargo install patch-crate --locked
+  libcap-utils \
+  bash
 
 ARG CARGO_FEATURES="blog"
 
 # Cache dependency artifacts to prevent recompilation on future builds
 WORKDIR /usr/src/app
-COPY rust-toolchain Cargo.toml Cargo.lock .
-COPY patches patches
+COPY rust-toolchain .cargo/ patches/ Cargo.toml Cargo.lock .
 RUN mkdir src \
   && touch src/lib.rs \
   && echo "fn main() {}" > build.rs \
-  && cargo patch-crate \
   && cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} 
 
 # Compile the real source code
 COPY . .
 COPY --from=www /usr/src/www/build www/build
 RUN touch build.rs \
-  && SKIP_PATCH_CRATE=1 cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
+  && cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
   && strip ./target/release/ssh-portfolio \
   && cp ./target/release/ssh-portfolio /usr/local/bin/ # must be moved to a secure path to preserve caps
 

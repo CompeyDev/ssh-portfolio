@@ -1,8 +1,6 @@
-diff --git a/src/picker.rs b/src/picker.rs
-index a8f4889..b5eaf5a 100644
---- a/src/picker.rs
-+++ b/src/picker.rs
-@@ -44,11 +44,11 @@ const DEFAULT_BACKGROUND: Rgba<u8> = Rgba([0, 0, 0, 0]);
+--- a/src/picker.rs	2025-09-01 11:25:57.725961319 +0100
++++ b/src/picker.rs	2025-09-01 11:27:39.264921598 +0100
+@@ -44,11 +44,11 @@
  
  #[derive(Clone, Debug)]
  pub struct Picker {

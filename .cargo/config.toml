@@ -1,0 +1,2 @@
+[build]
+rustc-wrapper = "./.cargo/cargo-rustc-patch.sh"

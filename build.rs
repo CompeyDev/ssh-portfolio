@@ -11,15 +11,6 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=src/atproto/lexicons");
     println!("cargo:rerun-if-changed=Cargo.toml");
 
-    #[cfg(feature = "blog")]
-    {
-        println!("cargo:rerun-if-changed=patches/");
-        println!("cargo:rerun-if-env-changed=SKIP_PATCH_CRATE");
-        if std::env::var("SKIP_PATCH_CRATE").is_err() {
-            patch_crate::run().expect("Failed while patching");
-        }
-    }
-
     // Generate ATProto client with lexicon validation
     #[cfg(feature = "blog")]
     atrium_codegen::genapi(

@@ -12,7 +12,7 @@ use directories::{ProjectDirs, UserDirs};
 use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{de::Deserializer, Deserialize};
-use ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey};
+use internal_russh_forked_ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey, self as ssh_key};
 use tracing::{debug, error, info, info_span, warn};
 
 use crate::action::Action;
@@ -355,7 +355,7 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
 
 pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
     if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
-        return Err(format!("Unable to parse `{}`", raw));
+        return Err(format!("Unable to parse `{raw}`"));
     }
     let raw = if !raw.contains("><") {
         let raw = raw.strip_prefix('<').unwrap_or(raw);

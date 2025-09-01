@@ -1,3 +1,3 @@
 [toolchain]
-channel = "nightly-2025-03-28"
+channel = "nightly-2025-06-20"
 components = ["clippy", "rust-analyzer", "cargo", "rustc"]

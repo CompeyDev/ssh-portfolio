@@ -94,7 +94,7 @@ pub fn host_ip() -> Result<[u8; 4]> {
 #[instrument(name = "config")]
 fn ssh_config() -> SshConfig {
     let conf = SshConfig {
-        methods: MethodSet::NONE,
+        methods: MethodSet::empty(),
         keys: CONFIG.private_keys.clone(),
         ..Default::default()
     };
