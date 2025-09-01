@@ -36,19 +36,9 @@ ssh -o SendEnv=TERM_PROGRAM erica@devcomp.xyz
 
 ### with cargo
 
-you'll need to have rust installed, you can do that using [rustup](https://rustup.rs/).
-
-we use [patch-crate](https://crates.io/crates/patch-crate) to patch some of our
-dependencies, so you'll need to install that:
+you'll need to have rust installed, you can do that using [rustup](https://rustup.rs/). then, run using:
 
 ```sh
-cargo install --locked patch-crate
-```
-
-then, apply patches and run the project:
-
-```sh
-cargo patch-crate
 cargo run --release --no-default-features -- --help
 ```
 
