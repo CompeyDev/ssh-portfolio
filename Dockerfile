@@ -19,7 +19,8 @@ RUN apk add --no-cache \
   zlib-dev \
   zlib-static \
   shadow \
-  libcap-utils
+  libcap-utils \
+  bash
 
 ARG CARGO_FEATURES="blog"
 
