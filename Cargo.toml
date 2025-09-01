@@ -39,14 +39,7 @@ blog = [
 
     # Build deps
     "dep:atrium-codegen",
-    "dep:patch-crate"
 ]
-
-[package.metadata.patch]
-crates = ["ratatui-image"]
-
-[patch.crates-io]
-ratatui-image = { path = "./target/patch/ratatui-image-8.0.1" }
 
 [dependencies]
 anyhow = "1.0.90"
@@ -107,5 +100,4 @@ shellexpand = "3.1.1"
 [build-dependencies]
 anyhow = "1.0.90"
 atrium-codegen = { git = "https://github.com/atrium-rs/atrium.git", rev = "ccc0213", optional = true }
-patch-crate = { version = "0.1.13", optional = true }
 vergen-gix = { version = "1.0.2", features = ["build", "cargo"] }
