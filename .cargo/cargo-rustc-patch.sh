@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Sourced from: https://github.com/cecton/cargo-fixup/tree/main
 # MIT License
