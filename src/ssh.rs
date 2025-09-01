@@ -121,16 +121,15 @@ impl SshSession {
     }
 }
 
-#[async_trait]
 impl Handler for SshSession {
     type Error = eyre::Error;
 
-    #[instrument(skip(self), span = "user_login", fields(method = "none"))]
+    #[instrument(skip(self), name = "user_login", fields(method = "none"))]
     async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
         Ok(Auth::Accept)
     }
 
-    #[instrument(skip(self, session, channel), span = "channel_establish", fields(channel_id = %channel.id()))]
+    #[instrument(skip(self, session, channel), name = "channel_establish", fields(channel_id = %channel.id()))]
     async fn channel_open_session(
         &mut self,
         channel: Channel<Msg>,

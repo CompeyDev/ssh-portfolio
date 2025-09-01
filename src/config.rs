@@ -12,7 +12,7 @@ use directories::{ProjectDirs, UserDirs};
 use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{de::Deserializer, Deserialize};
-use ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey};
+use internal_russh_forked_ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey, self as ssh_key};
 use tracing::{debug, error, info, info_span, warn};
 
 use crate::action::Action;
