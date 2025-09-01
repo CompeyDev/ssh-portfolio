@@ -78,7 +78,7 @@ impl Component for SelectionList<Post> {
                     format!("{:>2}", " ")
                 };
 
-            let padded_date = format!("{:>10}", post_creation_date);
+            let padded_date = format!("{post_creation_date:>10}");
 
             let title_spans = vec![
                 Span::styled(arrow_or_pad, accent_style),

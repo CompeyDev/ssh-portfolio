@@ -84,7 +84,7 @@ impl Content {
                     .add_modifier(Modifier::BOLD);
                 }
 
-                Line::raw(format!(" {}", line))
+                Line::raw(format!(" {line}"))
                     .style(Style::default().add_modifier(Modifier::BOLD))
             })
             .collect::<Vec<Line<'static>>>();

@@ -81,7 +81,7 @@ impl Component for Tabs {
             ));
 
             tab_lines[1].spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
-            tab_lines[1].spans.push(Span::styled(format!(" {} ", tab), style));
+            tab_lines[1].spans.push(Span::styled(format!(" {tab} "), style));
             tab_lines[1].spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
         }
 

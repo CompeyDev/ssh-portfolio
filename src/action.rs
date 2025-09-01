@@ -64,7 +64,7 @@ impl<'de> Deserialize<'de> for Action {
                         SelectPrev,
                     }
 
-                    let helper: Helper = serde_json::from_str(&format!("\"{}\"", v))
+                    let helper: Helper = serde_json::from_str(&format!("\"{v}\""))
                         .map_err(|_| de::Error::unknown_variant(v, &["Continue"]))?;
                     Ok(match helper {
                         Helper::Tick => Action::Tick,
