@@ -44,7 +44,6 @@ blog = [
 
 [dependencies]
 anyhow = "1.0.90"
-async-trait = "0.1.85"
 atrium-api = { version = "0.25.4", optional = true }
 atrium-common = { version = "0.1.2", optional = true }
 atrium-xrpc = { version = "0.12.3", optional = true }
@@ -70,7 +69,7 @@ directories = "6.0.0"
 figlet-rs = "0.1.5"
 futures = "0.3.31"
 human-panic = "2.0.2"
-image = { version = "0.25.6", optional = true }
+image = { version = "0.25.6", features = ["jpeg", "png", "webp"], default-features = false, optional = true }
 indoc = "2.0.5"
 ipld-core = { version = "0.4.2", optional = true }
 json5 = "0.4.1"
@@ -79,11 +78,11 @@ libc = "0.2.161"
 mime_guess = "2.0.5"
 pretty_assertions = "1.4.1"
 ratatui = { version = "0.29.0", features = ["serde", "macros"] }
-ratatui-image = { version = "8.0.1", optional = true }
+ratatui-image = { version = "8.0.1", default-features = false, optional = true, features = ["crossterm"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["charset", "http2", "rustls-tls"] }
 russh = { version = "0.54.3", default-features = false, features = ["flate2", "ring", "rsa"] }
 rust-embed = { version = "8.7.2" }
-serde = { version = "1.0.211", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.132"
 internal-russh-forked-ssh-key = { version = "0.6.11", features = ["getrandom", "crypto"] }
 signal-hook = "0.3.17"
@@ -94,11 +93,11 @@ tokio-util = "0.7.12"
 tower-http = { version = "0.6.6", features = ["trace"] }
 tracing = "0.1.40"
 tracing-error = "0.2.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "serde"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "serde"] }
 tui-markdown = { version = "0.3.5", optional = true }
 shellexpand = "3.1.1"
 
 [build-dependencies]
 anyhow = "1.0.90"
-atrium-codegen = { git = "https://github.com/atrium-rs/atrium.git", rev = "ccc0213", optional = true }
+atrium-codegen = { git = "https://github.com/atrium-rs/atrium.git", tag = "bsky-sdk-v0.1.21", optional = true }
 vergen-gix = { version = "1.0.2", features = ["build", "cargo"] }
