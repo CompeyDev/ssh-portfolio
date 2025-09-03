@@ -1,2 +1,0 @@
-// This is an @generated config. Your changes will be overwritten. Please edit `svelte.config.ts` instead.
-"use strict";import e from"@sveltejs/adapter-static";import{vitePreprocess as t}from"@sveltejs/vite-plugin-svelte";process.env.COMPILE_JS==="true"&&(await import("esbuild")).build({entryPoints:["svelte.config.ts"],outfile:"svelte.config.js",minify:!0,platform:"node",banner:{js:"// This is an @generated config. Your changes will be overwritten. Please edit `svelte.config.ts` instead."}}).catch(()=>process.exit(1));export default{preprocess:t(),kit:{adapter:e()}};
