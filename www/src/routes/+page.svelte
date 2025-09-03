@@ -51,7 +51,10 @@
 			} else {
 				animationFinished = true;
 				clearInterval(animation);
-				blinkCursor();
+				
+				commandText = command.substring(0, commandText.length);
+				const cursor = document.getElementsByClassName('cursor')[0];
+				cursor.classList.remove('hidden');
 			}
 		}, 100);
 	});
@@ -60,7 +63,8 @@
 <main class="flex h-screen w-screen items-center justify-center">
 	<div class="border-accent/50 relative flex h-[300px] w-[700px] flex-col rounded-lg border-2 p-4">
 		<div class="flex items-center space-x-1">
-			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}</pre>
+			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}<span class="hidden cursor">{cursor}</span></pre>
+
 			{#if animationFinished}
 				<div class="flex flex-row space-x-2 text-accent/50 font-normal transition-all">
 					<button class="hover:text-accent hover:cursor-pointer" onclick={launch} transition:fade={{delay: 500}}>
