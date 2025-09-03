@@ -1,8 +1,9 @@
 # ssh-portfolio
 
-![rust](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fgit.devcomp.xyz%2FDevComp%2Fssh-portfolio%2Fraw%2Fbranch%2Fmain%2Frust-toolchain&query=%24.toolchain.channel&style=flat-square&logo=rust&label=rust&color=red)
 ![made with ratatui](https://img.shields.io/badge/made_with-ratatui-slateblue?style=flat-square&logo=ratatui)
+![rust](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fgit.devcomp.xyz%2FDevComp%2Fssh-portfolio%2Fraw%2Fbranch%2Fmain%2Frust-toolchain&query=%24.toolchain.channel&style=flat-square&logo=rust&label=rust&color=red)
 ![version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fgit.devcomp.xyz%2FDevComp%2Fssh-portfolio%2Fraw%2Fbranch%2Fmain%2FCargo.toml&query=%24.package.version&style=flat-square&label=version&color=orange)
+![ci](https://img.shields.io/github/actions/workflow/status/CompeyDev/ssh-portfolio/ci.yml?style=flat-square)
 ![MIT licensed](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 
 what if the internet as we knew it was *different*? what if the world wide web
