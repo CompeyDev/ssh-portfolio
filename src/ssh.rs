@@ -302,7 +302,6 @@ impl SshServer {
     }
 }
 
-#[async_trait]
 impl Server for SshServer {
     type Handler = SshSession;
 
