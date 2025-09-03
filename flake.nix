@@ -32,8 +32,10 @@
 
           shellHook = ''
             # Use host's default shell to make it more homely
-            export SHELL=$(getent passwd $USER | cut -d: -f7)
-            exec $SHELL
+            if [[ $- == *i* ]]; then
+              export SHELL=$(getent passwd $USER | cut -d: -f7)
+              exec $SHELL
+            fi
           '';
         };
       });
