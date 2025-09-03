@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { crossfade, fade } from 'svelte/transition';
 
+	const repoUrl = 'https://github.com/CompeyDev/ssh-portfolio';
 	const sshDestination = 'erica@devcomp.xyz';
 	const command = `ssh -o SendEnv=TERM_PROGRAM ${sshDestination}`;
 	const cursor = '█'
@@ -61,7 +62,7 @@
 </script>
 
 <main class="flex h-screen w-screen items-center justify-center">
-	<div class="border-accent/50 relative flex h-[300px] w-[700px] flex-col rounded-lg border-2 p-4">
+	<div class="border-accent/50 relative flex h-[300px] w-[750px] flex-col rounded-lg border-2 p-4">
 		<div class="flex items-center space-x-1.5">
 			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}<span class="hidden cursor">{cursor}</span></pre>
 
@@ -87,13 +88,19 @@
 		</div>
 
 		{#if animationFinished}
-			<div class="flex flex-col ml-4" transition:fade={{delay: 500}}>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;q&gt; &lt;ctrl-d&gt; &lt;ctrl-c&gt; &lt;esc&gt; - quit</code>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;ctrl-z&gt; - suspend</code>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;right&gt; - next tab</code>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;left&gt; - prev tab</code>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;down&gt; - next option</code>
-				<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;up&gt; - prev option</code>
+			<div transition:fade={{delay: 500}} class="flex flex-col">
+				<div class="ml-4 flex flex-col">
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;q&gt; &lt;ctrl-d&gt; &lt;ctrl-c&gt; &lt;esc&gt; - quit</code>
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;ctrl-z&gt; - suspend</code>
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;right&gt; - next tab</code>
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;left&gt; - prev tab</code>
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;down&gt; - next option</code>
+					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;up&gt; - prev option</code>
+				</div>
+				<div class="mt-2 flex flex-col">
+					<code class="text-accent/50 font-bold"><span class="text-primary/50 select-none">$&nbsp;</span><span class="select-none">#&nbsp;</span>...or view the src code:</code>
+					<code class="text-primary font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>git clone <a target="_blank" href={repoUrl} class="text-blue-300 underline">{repoUrl}</a></code>
+				</div>
 			</div>
 		{/if}
 
