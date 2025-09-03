@@ -28,6 +28,7 @@
             pkgs.stdenv
             pkgs.git
             pkgs.zlib
+            pkgs.docker
           ];
 
           shellHook = ''
