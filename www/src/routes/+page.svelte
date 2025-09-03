@@ -3,7 +3,7 @@
 	import CopyIcon from '$lib/components/copyIcon.svelte';
 	import LaunchIcon from '$lib/components/launchIcon.svelte';
 	import { onMount } from 'svelte';
-	import { crossfade, fade } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 
 	const repoUrl = 'https://github.com/CompeyDev/ssh-portfolio';
 	const sshDestination = 'erica@devcomp.xyz';
@@ -31,16 +31,6 @@
 		hasLaunched = true;
 
 		setTimeout(() => (hasLaunched = false), 1000);
-	}
-
-	function blinkCursor() {
-		return setInterval(() => {
-			if (commandText.charAt(commandText.length - 1) === cursor) {
-				commandText = command + ' ';
-			} else {
-				commandText = command + cursor;
-			}
-		}, 500);
 	}
 
 	onMount(async () => {
