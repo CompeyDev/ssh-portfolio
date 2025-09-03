@@ -23,6 +23,7 @@
         devShell = pkgs.mkShell {
           buildInputs = [
             rust
+            pkgs.cargo-deny
             pkgs.bun
             pkgs.nixpkgs-fmt
             pkgs.stdenv
