@@ -48,7 +48,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ./target/
-          key: rust-build-${{ runner.os }}-${ runner.arch }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
+          key: rust-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
     
       - name: Lint rust
         run: nix develop -c bash -c 'mkdir www/build && cargo clippy && cargo deny check --hide-inclusion-graph && cargo fmt --check'
