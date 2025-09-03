@@ -26,7 +26,9 @@ ARG CARGO_FEATURES="blog"
 
 # Cache dependency artifacts to prevent recompilation on future builds
 WORKDIR /usr/src/app
-COPY rust-toolchain .cargo/ patches/ Cargo.toml Cargo.lock .
+COPY .cargo/ ./.cargo/
+COPY patches/ ./patches/
+COPY rust-toolchain Cargo.toml Cargo.lock .
 RUN mkdir src \
   && touch src/lib.rs \
   && echo "fn main() {}" > build.rs \
