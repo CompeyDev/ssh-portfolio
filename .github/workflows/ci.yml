@@ -52,7 +52,7 @@ jobs:
     
       - name: Install cargo-deny
         if: steps.nix-cache.outputs.cache-hit != 'true'
-        run: cargo install --locked cargo-deny
+        run: nix develop -c cargo install --locked cargo-deny
 
       - name: Run checks (server)
         run: nix develop -c bash -c 'mkdir www/build && cargo clippy && cargo deny check --hide-inclusion-graph && cargo fmt --check'
