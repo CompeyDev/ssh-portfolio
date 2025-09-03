@@ -65,7 +65,7 @@ jobs:
         features: ['', 'blog']
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
 
-    name: Build - ${{ matrix.runner }} ${{ matrix.features && ' (' + matrix.features + ')' || '' }}
+    name: Build - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
