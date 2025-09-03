@@ -1,13 +1,16 @@
 <script lang="ts">
 	import CheckIcon from '$lib/components/checkIcon.svelte';
 	import CopyIcon from '$lib/components/copyIcon.svelte';
+	import LaunchIcon from '$lib/components/launchIcon.svelte';
 	import { onMount } from 'svelte';
 	import { crossfade, fade } from 'svelte/transition';
 
-	const command = 'ssh -o SendEnv=TERM_PROGRAM erica@devcomp.xyz';
+	const sshDestination = 'erica@devcomp.xyz';
+	const command = `ssh -o SendEnv=TERM_PROGRAM ${sshDestination}`;
 	const cursor = '█'
 
-	let showCheckmark = $state(false);
+	let hasCopied = $state(false);
+	let hasLaunched = $state(false);
 	let animationFinished = $state(false);
 	let commandText = $state(cursor);
 
@@ -15,9 +18,18 @@
 		event.preventDefault();
 
 		navigator.clipboard.writeText(command);
-		showCheckmark = true;
+		hasCopied = true;
 
-		setTimeout(() => (showCheckmark = false), 1000);
+		setTimeout(() => (hasCopied = false), 1000);
+	}
+
+	function launch(event: MouseEvent) {
+		event.preventDefault();
+
+		window.location.href = `ssh://${sshDestination}`;
+		hasLaunched = true;
+
+		setTimeout(() => (hasLaunched = false), 1000);
 	}
 
 	function blinkCursor() {
@@ -41,22 +53,32 @@
 				clearInterval(animation);
 				blinkCursor();
 			}
-		}, 200);
+		}, 100);
 	});
 </script>
 
 <main class="flex h-screen w-screen items-center justify-center">
 	<div class="border-accent/50 relative flex h-[300px] w-[700px] flex-col rounded-lg border-2 p-4">
-		<div class="flex items-center space-x-2">
+		<div class="flex items-center space-x-1">
 			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}</pre>
 			{#if animationFinished}
-				<button class="text-accent/50 hover:text-accent font-normal transition-all hover:cursor-pointer" onclick={copy} transition:fade={{delay: 500}}>
-					{#if showCheckmark}
-						<CheckIcon />
-					{:else}
-						<CopyIcon />
-					{/if}
-				</button>
+				<div class="flex flex-row space-x-2 text-accent/50 font-normal transition-all">
+					<button class="hover:text-accent hover:cursor-pointer" onclick={launch} transition:fade={{delay: 500}}>
+						{#if hasLaunched}
+							<CheckIcon />
+						{:else}
+							<LaunchIcon />
+						{/if}
+					</button>
+
+					<button class="hover:text-accent hover:cursor-pointer" onclick={copy} transition:fade={{delay: 500}}>
+						{#if hasCopied}
+							<CheckIcon />
+						{:else}
+							<CopyIcon />
+						{/if}
+					</button>
+				</div>
 			{/if}
 		</div>
 
