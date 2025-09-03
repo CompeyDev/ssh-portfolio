@@ -36,6 +36,7 @@ RUN mkdir src \
 
 # Compile the real source code
 COPY . .
+RUN mkdir www/build
 COPY --from=www /usr/src/www/build www/build
 RUN touch build.rs \
   && cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"} \
