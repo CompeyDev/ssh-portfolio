@@ -9,10 +9,13 @@ use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use derive_deref::{Deref, DerefMut};
 use directories::{ProjectDirs, UserDirs};
+use internal_russh_forked_ssh_key::{
+    self as ssh_key, rand_core, Algorithm, LineEnding, PrivateKey,
+};
 use lazy_static::lazy_static;
 use ratatui::style::{Color, Modifier, Style};
-use serde::{de::Deserializer, Deserialize};
-use internal_russh_forked_ssh_key::{rand_core, Algorithm, LineEnding, PrivateKey, self as ssh_key};
+use serde::de::Deserializer;
+use serde::Deserialize;
 use tracing::{debug, error, info, info_span, warn};
 
 use crate::action::Action;
@@ -166,7 +169,7 @@ where
                     let algo = Algorithm::from_str(&pem_type)?;
                     let key = PrivateKey::random(&mut rand_core::OsRng, algo.to_owned())?;
                     key.write_openssh_file(&expanded_path, LineEnding::default())?;
-                    
+
                     return Ok(key);
                 }
 

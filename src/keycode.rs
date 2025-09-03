@@ -69,7 +69,7 @@ impl KeyCodeExt for KeyCode {
             .iter()
             .map(|&b| <Self as KeyCodeExt>::from(b))
             .collect::<Vec<Self>>();
-        
+
         match codes.as_slice() {
             [Self::Esc, Self::Char('['), Self::Char('A')] => Self::Up,
             [Self::Esc, Self::Char('['), Self::Char('B')] => Self::Down,

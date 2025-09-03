@@ -15,11 +15,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::action::Action;
-use crate::{components::*, CONFIG};
+use crate::components::*;
 use crate::config::Config;
 use crate::keycode::KeyCodeExt;
 use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
 use crate::tui::{Event, Terminal, Tui};
+use crate::CONFIG;
 
 pub struct App {
     config: Config,

@@ -128,7 +128,8 @@ impl Content {
             ),
             (
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-                "pesde-pkg/pesde: A multi-runtime package manager for the Luau programming language",
+                "pesde-pkg/pesde: A multi-runtime package manager for the Luau programming \
+                 language",
             ),
         ];
 
@@ -223,7 +224,7 @@ impl Content {
             Card { title: " 0x5eal/wg-lua", description: "A Lua implementation of the wireguard keygen algorithm" },
             Card { title: " 0x5eal/semver-luau", description: "Strongly typed semver parser for Luau" },
             Card { title: " CompeyDev/elytra-lock-fabric", description: "Client-side fabric mod to lock elytra usage using a keybind" },
-            Card { 
+            Card {
                 title: " CompeyDev/touch-grass-reminder",
                 description: "Client-side quilt mod which warns players when they have been excessively playing Minecraft"
             },

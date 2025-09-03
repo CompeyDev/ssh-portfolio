@@ -223,10 +223,9 @@ impl Handler for SshSession {
                 (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,
             ));
         } else {
-            self.terminal_info
-                .write()
-                .await
-                .set_kind(TerminalKind::Unsupported(crate::tui::terminal::UnsupportedReason::Unsized));
+            self.terminal_info.write().await.set_kind(TerminalKind::Unsupported(
+                crate::tui::terminal::UnsupportedReason::Unsized,
+            ));
         }
 
         if !term.contains("xterm") {
