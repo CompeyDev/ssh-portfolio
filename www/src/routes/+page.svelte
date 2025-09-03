@@ -62,7 +62,7 @@
 
 <main class="flex h-screen w-screen items-center justify-center">
 	<div class="border-accent/50 relative flex h-[300px] w-[700px] flex-col rounded-lg border-2 p-4">
-		<div class="flex items-center space-x-1">
+		<div class="flex items-center space-x-1.5">
 			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}<span class="hidden cursor">{cursor}</span></pre>
 
 			{#if animationFinished}
