@@ -34,6 +34,7 @@ jobs:
       
       - name: Restore and cache Nix store
         uses: nix-community/cache-nix-action@v6
+        id: nix-cache
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -50,6 +51,7 @@ jobs:
           key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
     
       - name: Install cargo-deny
+        if: steps.nix-cache.outputs.cache-hit != 'true'
         run: cargo install --locked cargo-deny
 
       - name: Run checks (server)
