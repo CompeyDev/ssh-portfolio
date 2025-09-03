@@ -104,5 +104,5 @@ jobs:
           nix develop -c cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
 
       - name: Build docker image
-        run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=$CARGO_FEATURES .
+        run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=$CARGO_FEATURES --progress tty .
 
