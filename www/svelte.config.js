@@ -1,18 +1,2 @@
-import adapter from '@sveltejs/adapter-static';
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-
-/** @type {import('@sveltejs/kit').Config} */
-const config = {
-	// Consult https://svelte.dev/docs/kit/integrations
-	// for more information about preprocessors
-	preprocess: vitePreprocess(),
-
-	kit: {
-		// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-		adapter: adapter()
-	}
-};
-
-export default config;
+// This is an @generated config. Your changes will be overwritten. Please edit `svelte.config.ts` instead.
+"use strict";import e from"@sveltejs/adapter-static";import{vitePreprocess as t}from"@sveltejs/vite-plugin-svelte";process.env.COMPILE_JS==="true"&&(await import("esbuild")).build({entryPoints:["svelte.config.ts"],outfile:"svelte.config.js",minify:!0,platform:"node",banner:{js:"// This is an @generated config. Your changes will be overwritten. Please edit `svelte.config.ts` instead."}}).catch(()=>process.exit(1));export default{preprocess:t(),kit:{adapter:e()}};
