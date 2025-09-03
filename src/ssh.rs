@@ -2,7 +2,6 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use color_eyre::eyre::{self, eyre};
 use russh::server::{Auth, Config, Handle, Handler, Msg, Server, Session};
 use russh::{Channel, ChannelId, CryptoVec, Pty};
