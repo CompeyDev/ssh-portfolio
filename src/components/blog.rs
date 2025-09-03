@@ -52,7 +52,7 @@ impl BlogPosts {
 
     async fn header_image(&self, img: Ogp) -> Result<StatefulProtocol> {
         if let Some(picker) = &self.image_renderer {
-            let img_blob = reqwest::get(img.url)
+            let img_blob = reqwest::get(img.url.clone())
                 .await?
                 .bytes()
                 .await?
