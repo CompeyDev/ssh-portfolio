@@ -53,7 +53,7 @@ jobs:
         run: cargo install --locked cargo-deny
 
       - name: Run checks (server)
-        run: nix develop -c bash -c 'cargo fmt --check && cargo clippy && cargo deny check --hide-inclusion-graph'
+        run: nix develop -c bash -c 'cargo clippy && cargo deny check --hide-inclusion-graph && cargo fmt --check'
 
       - name: Run checks (website)
         run: nix develop -c bash -c 'cd www && bun install && bun run check'
@@ -72,7 +72,7 @@ jobs:
       CARGO_FEATURES: ${{ matrix.features }}
       CARGO_TERM_COLOR: always
 
-    name: Build - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
+    name: Build - ${{ matrix.runner }} ${{ matrix.features != '' && format('({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
