@@ -60,7 +60,7 @@ jobs:
         run: nix develop -c cargo test
 
   build:
-    needs: ['checks']
+    needs: ['ci']
     strategy:
       fail-fast: false
       matrix:
