@@ -43,11 +43,11 @@ jobs:
           purge-created: 0
           purge-primary-key: never
 
-      - name: Restore and cache build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Restore and cache build data
+        uses: actions/cache@v4
         with:
-          prefix-key: rust-build
-          cache-bin: true 
+          path: ./target/
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
     
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
@@ -92,11 +92,11 @@ jobs:
           purge-created: 0
           purge-primary-key: never
 
-      - name: Restore and cache build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Restore and cache build data
+        uses: actions/cache@v4
         with:
-          prefix-key: rust-build
-          cache-bin: true 
+          path: ./target/
+          key: rust-build-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
 
       - name: Build binary
         run: |
