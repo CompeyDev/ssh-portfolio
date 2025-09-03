@@ -20,6 +20,9 @@ permissions:
 
 jobs:
   checks:
+    env:
+      CARGO_TERM_COLOR: always
+    
     name: Apply code checks
     runs-on: ubuntu-latest
     steps:
@@ -59,11 +62,15 @@ jobs:
         run: nix develop -c cargo test
 
   build:
+    needs: ['checks']
     strategy:
       fail-fast: false
       matrix:
         features: ['', 'blog']
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    env:
+      CARGO_FEATURES: ${{ matrix.features }}
+      CARGO_TERM_COLOR: always
 
     name: Build - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
@@ -93,10 +100,9 @@ jobs:
 
       - name: Build binary
         run: |
-          export CARGO_FEATURES=${{ matrix.features }}
           nix develop -c bash -c 'cd www && bun install && bun run build'
           nix develop -c cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
 
       - name: Build docker image
-        run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=${{ matrix.features }} .
+        run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=$CARGO_FEATURES .
 
