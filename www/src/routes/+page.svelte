@@ -8,7 +8,7 @@
 	const repoUrl = 'https://github.com/CompeyDev/ssh-portfolio';
 	const sshDestination = 'erica@devcomp.xyz';
 	const command = `ssh -o SendEnv=TERM_PROGRAM ${sshDestination}`;
-	const cursor = '█'
+	const cursor = '█';
 
 	let hasCopied = $state(false);
 	let hasLaunched = $state(false);
@@ -40,7 +40,7 @@
 			} else {
 				commandText = command + cursor;
 			}
-		}, 500)
+		}, 500);
 	}
 
 	onMount(async () => {
@@ -52,7 +52,7 @@
 			} else {
 				animationFinished = true;
 				clearInterval(animation);
-				
+
 				commandText = command.substring(0, commandText.length);
 				const cursor = document.getElementsByClassName('cursor')[0];
 				cursor.classList.remove('hidden');
@@ -62,13 +62,13 @@
 </script>
 
 <main class="flex h-screen w-screen items-center justify-center">
-	<div class="border-accent/50 relative flex h-[300px] w-[750px] flex-col rounded-lg border-2 p-4">
+	<div class="relative flex h-[300px] w-[750px] flex-col rounded-lg border-2 border-accent/50 p-4">
 		<div class="flex items-center space-x-1.5">
-			<pre class="text-primary inline font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}<span class="hidden cursor">{cursor}</span></pre>
+			<pre class="inline font-bold text-primary"><span class="text-primary/50 select-none">$&nbsp;</span>{commandText}<span class="cursor hidden">{cursor}</span></pre>
 
 			{#if animationFinished}
-				<div class="flex flex-row space-x-2 text-accent/50 font-normal transition-all">
-					<button class="hover:text-accent hover:cursor-pointer" onclick={launch} transition:fade={{delay: 500}}>
+				<div class="flex flex-row space-x-2 font-normal text-accent/50 transition-all">
+					<button class="hover:cursor-pointer hover:text-accent" onclick={launch} transition:fade={{ delay: 500 }}>
 						{#if hasLaunched}
 							<CheckIcon />
 						{:else}
@@ -76,7 +76,7 @@
 						{/if}
 					</button>
 
-					<button class="hover:text-accent hover:cursor-pointer" onclick={copy} transition:fade={{delay: 500}}>
+					<button class="hover:cursor-pointer hover:text-accent" onclick={copy} transition:fade={{ delay: 500 }}>
 						{#if hasCopied}
 							<CheckIcon />
 						{:else}
@@ -88,7 +88,7 @@
 		</div>
 
 		{#if animationFinished}
-			<div transition:fade={{delay: 500}} class="flex flex-col">
+			<div transition:fade={{ delay: 500 }} class="flex flex-col">
 				<div class="ml-4 flex flex-col">
 					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;q&gt; &lt;ctrl-d&gt; &lt;ctrl-c&gt; &lt;esc&gt; - quit</code>
 					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;ctrl-z&gt; - suspend</code>
@@ -98,16 +98,16 @@
 					<code class="text-accent/50"><span class="select-none">#&nbsp;</span>&lt;up&gt; - prev option</code>
 				</div>
 				<div class="mt-2 flex flex-col">
-					<code class="text-accent/50 font-bold"><span class="text-primary/50 select-none">$&nbsp;</span><span class="select-none">#&nbsp;</span>...or view the src code:</code>
-					<code class="text-primary font-bold"><span class="text-primary/50 select-none">$&nbsp;</span>git clone <a target="_blank" href={repoUrl} class="text-blue-300 underline">{repoUrl}</a></code>
+					<code class="font-bold text-accent/50"><span class="text-primary/50 select-none">$&nbsp;</span><span class="select-none">#&nbsp;</span>...or view the src code:</code>
+					<code class="font-bold text-primary"><span class="text-primary/50 select-none">$&nbsp;</span>git clone <a target="_blank" href={repoUrl} class="text-blue-300 underline">{repoUrl}</a></code>
 				</div>
 			</div>
 		{/if}
 
-		<div class="group absolute -bottom-6 right-0">
-			<span class="group-hover:animate-sleep-z absolute -left-4 top-8 opacity-0">z</span>
-			<span class="group-hover:animate-sleep-z absolute -left-3 top-8 opacity-0" style="animation-delay:0.3s;">z</span>
-			<span class="group-hover:animate-sleep-z absolute -left-2 top-8 opacity-0" style="animation-delay:0.6s;">z</span>
+		<div class="group absolute right-0 -bottom-6">
+			<span class="absolute top-8 -left-4 opacity-0 group-hover:animate-sleep-z">z</span>
+			<span class="absolute top-8 -left-3 opacity-0 group-hover:animate-sleep-z" style="animation-delay:0.3s;">z</span>
+			<span class="absolute top-8 -left-2 opacity-0 group-hover:animate-sleep-z" style="animation-delay:0.6s;">z</span>
 
 			<pre>
  |\__/,|   (`\
