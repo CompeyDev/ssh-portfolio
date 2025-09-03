@@ -58,7 +58,7 @@ jobs:
         run: nix develop -c bash -c 'mkdir www/build && cargo clippy && cargo deny check --hide-inclusion-graph && cargo fmt --check'
 
       - name: Run checks (website)
-        run: nix develop -c bash -c 'cd www && bun install && bun run check'
+        run: nix develop -c bash -c 'cd www && bun install --locked && bun run check'
 
       - name: Run tests
         run: nix develop -c cargo test
@@ -102,7 +102,7 @@ jobs:
 
       - name: Build binary
         run: |
-          nix develop -c bash -c 'cd www && bun install && bun run build'
+          nix develop -c bash -c 'cd www && bun install --locked && bun run build'
           nix develop -c cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
 
       - name: Build docker image
