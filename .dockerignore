@@ -2,4 +2,3 @@ Dockerfile
 target/
 node_modules/
 /www/build
-/www/svelte.config.ts
