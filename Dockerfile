@@ -14,8 +14,6 @@ RUN apk add --no-cache \
   build-base \
   git \
   pkgconfig \
-  openssl-dev \
-  openssl-libs-static \
   zlib-dev \
   zlib-static \
   shadow \
