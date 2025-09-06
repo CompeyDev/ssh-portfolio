@@ -3,6 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+  "module": "svelte.config.ts",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -11,7 +12,8 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint ."
+		"lint": "prettier --check . && eslint .",
+    "postinstall": "nix develop -c bun2nix -o bun.nix"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.3.2",
