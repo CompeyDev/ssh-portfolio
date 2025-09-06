@@ -57,6 +57,7 @@
             cp -r build/ $out
           '';
           checkPhase = ''
+            bun run check
             bun run lint
           '';
         };
