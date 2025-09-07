@@ -22,9 +22,15 @@ jobs:
   ci:
     env:
       CARGO_TERM_COLOR: always
-    
-    name: CI
-    runs-on: ubuntu-latest
+      CARGO_FEATURES: ${{ matrix.features }}
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ['blog', '']
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+
+    name: CI (${{ runner.os }}-${{ runner.arch }})
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,52 +50,13 @@ jobs:
           purge-created: 0
           purge-primary-key: never
     
-      - name: Run code checks 
+      - name: Lint and check code
         run: nix flake check
 
-  build:
-    needs: ['ci']
-    strategy:
-      fail-fast: false
-      matrix:
-        features: ['', 'blog']
-        runner: [ubuntu-22.04, ubuntu-22.04-arm]
-    env:
-      CARGO_FEATURES: ${{ matrix.features }}
-      CARGO_TERM_COLOR: always
-
-    name: Build - ${{ matrix.runner }} ${{ matrix.features != '' && format('({0})', matrix.features) || '' }}
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Install nix
-        uses: nixbuild/nix-quick-install-action@v33
-      
-      - name: Restore and cache Nix store
-        uses: nix-community/cache-nix-action@v6
-        with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
-          gc-max-store-size-linux: 5368709000 
-          purge: true
-          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
-          purge-created: 0
-          purge-primary-key: never
-
-      - name: Restore and cache build data
-        uses: actions/cache@v4
-        with:
-          path: ./target/
-          key: rust-build-${{ runner.os }}-${{ runner.arch }}${{ matrix.features != '' && format('-{0}-', matrix.features) || '' }}${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain') }} 
-
-      - name: Build web
-        run: nix develop -c bash -c 'cd www && bun install --locked && bun run build'
-
-      - name: Compile rust
-        run: nix develop -c cargo build --locked --release --no-default-features ${CARGO_FEATURES:+--features "$CARGO_FEATURES"}
+      # FIXME: Once we centralize docker building into our nix flake, we should update the features matrix
+      # to instead refer to the nix attributes in `default.nix`
+      - name: Build project
+        run: nix build --file . ssh-portfolio${CARGO_FEATURES:+-$CARGO_FEATURES} 
 
       - name: Build docker image
         run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=$CARGO_FEATURES .
-
