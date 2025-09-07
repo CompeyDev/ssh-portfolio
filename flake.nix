@@ -116,17 +116,26 @@
         );
 
         # Finally, compile the actual project
-        ssh-portfolio = craneLib.buildPackage (
-          commonCraneArgs
-          // {
-            inherit cargoArtifacts cargoVendorDir;
+        crate =
+          {
+            features ? [ ],
+          }:
+          craneLib.buildPackage (
+            commonCraneArgs
+            // {
+              inherit cargoArtifacts cargoVendorDir;
+              doChecks = false;
+              cargoExtraArgs = "--locked --no-default-features ${
+                lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
+              }";
+              preBuild = ''
+                mkdir -p www/build
+                cp -r ${www} www/build
+              '';
+            }
+          );
 
-            preBuild = ''
-              mkdir -p www/build
-              cp -r ${www} www/build
-            '';
-          }
-        );
+        ssh-portfolio = pkgs.callPackage crate { };
 
       in
       {
