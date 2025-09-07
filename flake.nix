@@ -67,15 +67,13 @@
           # Include source code and other files required to build, exclude `.cargo` containing `cargo-rustc-patch`
           src = lib.fileset.toSource {
             root = ./.;
-            fileset = lib.fileset.traceVal (
-              lib.fileset.unions ([
-                (lib.fileset.difference (craneLib.fileset.commonCargoSources ./.) (lib.fileset.fromSource ./.cargo))
-                (lib.fileset.fromSource ./.config)
-                (lib.fileset.fromSource ./assets)
-                (lib.fileset.fromSource ./patches)
-                (lib.fileset.fromSource ./src/atproto/lexicons)
-              ])
-            );
+            fileset = lib.fileset.unions ([
+              (lib.fileset.difference (craneLib.fileset.commonCargoSources ./.) (lib.fileset.fromSource ./.cargo))
+              (lib.fileset.fromSource ./.config)
+              (lib.fileset.fromSource ./assets)
+              (lib.fileset.fromSource ./patches)
+              (lib.fileset.fromSource ./src/atproto/lexicons)
+            ]);
           };
           strictDeps = true;
           nativeBuildInputs = with pkgs; [
@@ -87,23 +85,21 @@
 
         # Apply patches located in the `./patches/` dir
         patches = lib.fileset.fromSource ./patches;
-        cargoVendorDir = lib.traceVal (
-          builtins.toString (
-            craneLib.vendorCargoDeps (
-              commonCraneArgs
-              // {
-                overrideVendorCargoPackage =
-                  p: drv:
-                  let
-                    attrs = (lib.groupBy (p: builtins.baseNameOf (builtins.dirOf p)) (lib.fileset.toList patches));
-                    key = "${p.name}-${p.version}";
-                  in
-                  if (builtins.hasAttr key attrs) then
-                    lib.traceVal (builtins.toString (drv.overrideAttrs { patches = attrs.${key}; }))
-                  else
-                    drv;
-              }
-            )
+        cargoVendorDir = builtins.toString (
+          craneLib.vendorCargoDeps (
+            commonCraneArgs
+            // {
+              overrideVendorCargoPackage =
+                p: drv:
+                let
+                  attrs = (lib.groupBy (p: builtins.baseNameOf (builtins.dirOf p)) (lib.fileset.toList patches));
+                  key = "${p.name}-${p.version}";
+                in
+                if (builtins.hasAttr key attrs) then
+                  builtins.toString (drv.overrideAttrs { patches = attrs.${key}; })
+                else
+                  drv;
+            }
           )
         );
 
