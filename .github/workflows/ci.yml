@@ -29,7 +29,7 @@ jobs:
         features: ['blog', '']
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
 
-    name: CI - ${{ matrix.runner }}
+    name: CI - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
