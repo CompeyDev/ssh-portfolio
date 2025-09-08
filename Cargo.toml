@@ -1,9 +1,10 @@
 [package]
 name = "ssh-portfolio"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "introducing a portfolio as a tui app served over ssh!"
 license = "AGPL-3.0-only"
+homepage = "https://devcomp.xyz"
 repository = "https://git.devcomp.xyz/DevComp/ssh-portfolio"
 authors = ["Erica Marigold <hi@devcomp.xyz>"]
 build = "build.rs"
