@@ -143,8 +143,16 @@
 
         checks = {
           inherit ssh-portfolio www;
+          formatting = pkgs.runCommandLocal { buildInputs = [ pkgs.nixfmt-tree ]; } ''
+            set -euo pipefail
+            cp -r ${./.} workdir
+            chmod -R +w workdir/
+            treefmt --ci --tree-root workdir/
+            touch $out
+          '';
         };
 
+        formatter = pkgs.nixfmt-tree;
         devShells.default = craneLib.devShell {
           inputsFrom = [ ssh-portfolio ];
           checks = self.checks.${system};
@@ -152,7 +160,7 @@
             bun
             bun2nix.packages.${system}.default
             git
-            nixfmt-rfc-style
+            nixfmt-tree
             docker
           ];
 
