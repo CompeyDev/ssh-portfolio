@@ -132,6 +132,9 @@
           );
 
         ssh-portfolio = pkgs.callPackage crate { };
+        ssh-portfolio-deny = craneLib.cargoDeny commonCraneArgs // {
+          cargoDenyExtraArgs = "--hide-inclusion-graph";
+        };
 
       in
       {
@@ -142,7 +145,7 @@
         };
 
         checks = {
-          inherit ssh-portfolio www;
+          inherit ssh-portfolio ssh-portfolio-deny www;
           formatting = pkgs.runCommandLocal "treefmt-check" { buildInputs = [ pkgs.nixfmt-tree ]; } ''
             set -euo pipefail
             cp -r ${./.} workdir
