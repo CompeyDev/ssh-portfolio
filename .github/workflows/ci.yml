@@ -38,6 +38,11 @@ jobs:
       - name: Install nix
         uses: nixbuild/nix-quick-install-action@v33
       
+      - name: Update nix channels
+        run: |
+          nix-channel --add https://nixos.org/channels/nixpkgs-unstable
+          nix-channel --update
+
       - name: Restore and cache Nix store
         uses: nix-community/cache-nix-action@v6
         id: nix-cache
