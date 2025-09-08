@@ -2,7 +2,7 @@
 FROM oven/bun:1.2-alpine AS www
 WORKDIR /usr/src/www
 COPY www/package.json www/bun.lock .
-RUN bun install
+RUN bun install --locked
 COPY www .
 RUN bun run build
 
