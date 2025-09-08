@@ -143,7 +143,7 @@
 
         checks = {
           inherit ssh-portfolio www;
-          formatting = pkgs.runCommandLocal { buildInputs = [ pkgs.nixfmt-tree ]; } ''
+          formatting = pkgs.runCommandLocal "treefmt-check" { buildInputs = [ pkgs.nixfmt-tree ]; } ''
             set -euo pipefail
             cp -r ${./.} workdir
             chmod -R +w workdir/
