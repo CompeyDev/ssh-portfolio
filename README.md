@@ -43,6 +43,29 @@ you'll need to have rust installed, you can do that using [rustup](https://rustu
 cargo run --release --no-default-features -- --help
 ```
 
+### with nix
+
+the nix flake exports a package with an overridable `features` attribute. `default.nix` exports two variants using this, 
+`ssh-portfolio` and `ssh-portfolio-blog`.
+
+```sh
+nix build --file . ssh-portflio      # without blog
+nix build --file . ssh-portflio-blog # with blog
+
+# then run it:
+./result/bin/ssh-portfolio --help
+```
+
+or with your own set of features to build for:
+
+```nix
+# assuming this is in `custom.nix` in the same directory as `flake.nix`:
+{ pkgs ? import <nixpkgs> { } }:
+{
+  ssh-portfolio-custom = (builtins.getFlake (builtins.toString ./.)).packages.${pkgs.system}.ssh-portfolio.override { features = [ ... ]; };
+}
+```
+
 ### with docker
 
 build an image:
