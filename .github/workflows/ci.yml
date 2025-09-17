@@ -7,6 +7,7 @@ on:
     paths-ignore:
       - '**/*.md'
       - '.github/assets/**'
+      - '.github/dependabot.yml'
       - 'LICENSE'
   pull_request:
   workflow_dispatch:
