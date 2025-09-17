@@ -9,7 +9,7 @@ updates:
     - dependencies
     - automation
   schedule:
-    interval: "0 0 */3 * *" # once every three days
+    interval: "0 0 * * */3" # once every three days
   open-pull-requests-limit: 10
 - package-ecosystem: bun
   directory: "www/"
@@ -20,7 +20,7 @@ updates:
     - automation
     - www
   schedule:
-    interval: "0 0 */3 * *" # once every three days
+    interval: "0 0 * * */3" # once every three days
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
