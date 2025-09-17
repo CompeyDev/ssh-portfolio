@@ -1,7 +1,5 @@
 version: 2
 
-
-
 updates:
 - package-ecosystem: cargo
   directory: "/"
@@ -11,7 +9,7 @@ updates:
     - dependencies
     - automation
   schedule:
-    interval: "weekly"
+    interval: "0 0 */3 * *" # once every three days
   open-pull-requests-limit: 10
 - package-ecosystem: bun
   directory: "www/"
@@ -22,7 +20,7 @@ updates:
     - automation
     - www
   schedule:
-    interval: "weekly"
+    interval: "0 0 */3 * *" # once every three days
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
@@ -32,5 +30,5 @@ updates:
     - dependencies
     - automation
   schedule:
-    interval: "0 8 * * 1/2" # once every two weeks
-  open-pull-requests-limit: 10
+    interval: "weekly"
+    open-pull-requests-limit: 10
