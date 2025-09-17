@@ -1,0 +1,42 @@
+name: "Update nix flake dependencies"
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0' # once every week
+
+jobs:
+  nix-flake-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install nix
+        uses: nixbuild/nix-quick-install-action@v33
+     
+      - name: Restore and cache Nix store
+        uses: nix-community/cache-nix-action@v6
+        id: nix-cache
+        with:
+          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+          gc-max-store-size-linux: 5368709000 
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
+          purge-created: 0
+          purge-primary-key: never
+
+      - uses: DeterminateSystems/update-flake-lock@v27
+        with:
+          pr-title: "Update Nix flake inputs" 
+          pr-labels: |
+            automated
+            dependencies
