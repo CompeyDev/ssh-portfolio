@@ -38,7 +38,7 @@ jobs:
         with:
           git-committer-name: "github-actions[bot]"
           git-committer-email: "41898282+github-actions[bot]@users.noreply.github.com"
-          pr-title: "Update Nix flake inputs" 
+          pr-title: "build(nix): update input dep versions" 
           pr-labels: |
             automated
             dependencies
