@@ -49,11 +49,7 @@ impl Component for Cat {
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
         frame.render_widget(
-            Paragraph::new(CAT_ASCII_ART).style(
-                Style::default()
-                    .fg(Color::Magenta)
-                    .add_modifier(Modifier::SLOW_BLINK | Modifier::BOLD),
-            ),
+            Paragraph::new(CAT_ASCII_ART).style(Style::default().fg(Color::Magenta).bold()),
             Rect { x: area.width - 17, y: area.height - 4, width: 16, height: 6 },
         );
 
