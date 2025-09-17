@@ -1,17 +1,36 @@
 version: 2
+
+
+
 updates:
 - package-ecosystem: cargo
   directory: "/"
+  commit-message:
+    prefix: "build(deps)"
+  labels:
+    - dependencies
+    - automation
   schedule:
     interval: "weekly"
   open-pull-requests-limit: 10
 - package-ecosystem: bun
   directory: "www/"
+  commit-message:
+    prefix: "build(www/deps)"
+  labels:
+    - dependencies
+    - automation
+    - www
   schedule:
     interval: "weekly"
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
+  commit-message:
+    prefix: "ci(deps)"
+  labels:
+    - dependencies
+    - automation
   schedule:
     interval: "0 8 * * 1/2" # once every two weeks
   open-pull-requests-limit: 10
