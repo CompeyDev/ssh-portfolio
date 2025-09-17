@@ -46,6 +46,7 @@ pub struct App {
     cat: Arc<Mutex<Cat>>,
     #[cfg(feature = "blog")]
     blog_posts: Arc<Mutex<BlogPosts>>,
+    version_info: Arc<Mutex<VersionInfo>>,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -83,6 +84,8 @@ impl App {
             rt.block_on(content.try_lock()?.blog_content())?,
         )));
 
+        let version_info = Arc::new(Mutex::new(VersionInfo::new()));
+
         Ok(Self {
             terminal_info,
             tick_rate,
@@ -105,6 +108,7 @@ impl App {
             cat,
             #[cfg(feature = "blog")]
             blog_posts,
+            version_info,
         })
     }
 
@@ -140,13 +144,14 @@ impl App {
             self.cat.try_lock()?.register_config_handler(self.config.clone())?;
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.register_config_handler(self.config.clone())?;
+            self.version_info.try_lock()?.register_config_handler(self.config.clone())?;
 
-            for _ in 1..50 {
+            for _ in 1..5 {
                 if matches!(
                     self.terminal_info.blocking_read().kind(),
                     TerminalKind::Unsupported(UnsupportedReason::Unprobed)
                 ) {
-                    tracing::debug!("Waiting for 5s for terminal info to be probed");
+                    tracing::debug!("Waiting for for terminal info to be probed");
                     std::thread::sleep(Duration::from_millis(100));
                 }
             }
@@ -158,6 +163,7 @@ impl App {
             self.cat.try_lock()?.init(self.terminal_info.clone(), size)?;
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.version_info.try_lock()?.init(self.terminal_info.clone(), size)?;
 
             Ok::<_, eyre::Error>(())
         })?;
@@ -376,6 +382,21 @@ impl App {
                 },
             )
             .map_err(std::io::Error::other)?;
+
+            // Render version and uptime version info
+            self.version_info
+                .try_lock()
+                .map_err(std::io::Error::other)?
+                .draw(
+                    frame,
+                    Rect {
+                        x: chunks[0].x,
+                        y: chunks[0].y + 1,
+                        width: chunks[0].width - 2,
+                        height: 1,
+                    },
+                )
+                .map_err(std::io::Error::other)?;
 
             // Render the content
             let content_rect = Rect {

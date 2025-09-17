@@ -22,6 +22,7 @@ mod cat;
 mod content;
 #[cfg(feature = "blog")]
 mod selection_list;
+mod version_info;
 mod tabs;
 
 #[cfg(feature = "blog")]
@@ -31,6 +32,7 @@ pub use cat::*;
 pub use content::*;
 #[cfg(feature = "blog")]
 pub use selection_list::*;
+pub use version_info::*;
 pub use tabs::*;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
