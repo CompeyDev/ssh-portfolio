@@ -40,7 +40,7 @@ jobs:
           git-committer-email: "41898282+github-actions[bot]@users.noreply.github.com"
           branch: build/nix-flake-lock-update
           pr-title: "build(nix): update input dep versions" 
-          pr-title: "build(nix): update input dep versions" 
+          commit-msg: "build(nix): update input dep versions" 
           pr-labels: |
             automated
             dependencies
