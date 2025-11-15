@@ -157,6 +157,7 @@
 
         formatter = pkgs.nixfmt-tree;
         devShells.default = craneLib.devShell {
+          name = "ssh-portfolio";
           inputsFrom = [ ssh-portfolio ];
           checks = self.checks.${system};
           packages = with pkgs; [
