@@ -137,7 +137,8 @@ fn project_directory() -> Option<ProjectDirs> {
 #[optimize(speed)]
 fn private_key_deserialize<'de, D>(deserializer: D) -> Result<Vec<PrivateKey>, D::Error>
 where
-    D: Deserializer<'de>, {
+    D: Deserializer<'de>,
+{
     let keys = HashMap::<String, String>::deserialize(deserializer)?
         .into_iter()
         .map(|(pem_type, pem_or_path)| {
@@ -194,7 +195,8 @@ pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>, {
+        D: Deserializer<'de>,
+    {
         let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(deserializer)?;
 
         let keybindings = parsed_map
@@ -389,7 +391,8 @@ pub struct Styles(pub HashMap<Mode, HashMap<String, Style>>);
 impl<'de> Deserialize<'de> for Styles {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>, {
+        D: Deserializer<'de>,
+    {
         let parsed_map = HashMap::<Mode, HashMap<String, String>>::deserialize(deserializer)?;
 
         let styles = parsed_map
@@ -557,15 +560,22 @@ mod tests {
 
     #[test]
     fn test_config() -> Result<()> {
-        let c = Config::new()?;
-        assert_eq!(
-            c.keybindings
-                .get(&Mode::Home)
-                .unwrap()
-                .get(&parse_key_sequence("<q>").unwrap_or_default())
-                .unwrap(),
-            &Action::Quit
-        );
+        if option_env!("NIX_BUILD_TOP").is_none() {
+            // Only run this test when not in a nix build environment, since
+            // the key deserialization / generation process depends on reading
+            // or writing to paths which there are no perms to access
+
+            let c = Config::new()?;
+            assert_eq!(
+                c.keybindings
+                    .get(&Mode::Home)
+                    .unwrap()
+                    .get(&parse_key_sequence("<q>").unwrap_or_default())
+                    .unwrap(),
+                &Action::Quit
+            );
+        }
+
         Ok(())
     }
 
