@@ -13,13 +13,13 @@
       "locked": {
         "lastModified": 1763731225,
         "narHash": "sha256-YxPBXh8/ZSH6sqDpc4kstfv+9QR6vIb0mB2n5oJGPy8=",
-        "owner": "baileyluTCD",
+        "owner": "nix-community",
         "repo": "bun2nix",
         "rev": "21f2aed3b1f1d4af93df1a6d34cb3e3f703ac6f9",
         "type": "github"
       },
       "original": {
-        "owner": "baileyluTCD",
+        "owner": "nix-community",
         "repo": "bun2nix",
         "type": "github"
       }

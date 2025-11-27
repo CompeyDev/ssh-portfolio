@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    bun2nix.url = "github:baileyluTCD/bun2nix";
+    bun2nix.url = "github:nix-community/bun2nix";
 
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
@@ -27,12 +27,14 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ (import rust-overlay) ];
+          overlays = [
+            (import rust-overlay)
+            bun2nix.overlays.default
+          ];
         };
 
         # --- Libraries ---
         lib = pkgs.lib;
-        bunLib = bun2nix.lib.${system};
         craneLib = (crane.mkLib pkgs).overrideToolchain (
           toolchain:
           toolchain.rust-bin.nightly."2025-06-20".default.override {
@@ -46,10 +48,14 @@
         );
 
         # Build www project
-        www = bunLib.mkBunDerivation {
-          bunNix = ./www/bun.nix;
+        www = pkgs.stdenv.mkDerivation {
+          name = "ssh-portfolio-www";
           packageJson = ./www/package.json;
           src = ./www;
+
+          nativeBuildInputs = [ pkgs.bun2nix.hook ];
+          bunDeps = pkgs.bun2nix.fetchBunDeps { bunNix = ./www/bun.nix; };
+
           buildPhase = ''
             bun run build
           '';
@@ -132,9 +138,12 @@
           );
 
         ssh-portfolio = pkgs.callPackage crate { };
-        ssh-portfolio-deny = craneLib.cargoDeny commonCraneArgs // {
-          cargoDenyExtraArgs = "--hide-inclusion-graph";
-        };
+        ssh-portfolio-deny = craneLib.cargoDeny (
+          commonCraneArgs
+          // {
+            cargoDenyChecks = "--hide-inclusion-graph bans licenses sources";
+          }
+        );
 
       in
       {
@@ -150,7 +159,7 @@
             set -euo pipefail
             cp -r ${./.} workdir
             chmod -R +w workdir/
-            treefmt --ci --tree-root workdir/
+            treefmt --ci --tree-root workdir/ --excludes '**/bun.nix'
             touch $out
           '';
         };
