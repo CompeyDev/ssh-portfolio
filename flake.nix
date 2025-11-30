@@ -151,7 +151,7 @@
                 VERGEN_GIT_COMMIT_COUNT = toString (self.sourceInfo.revCount or 0);
                 VERGEN_GIT_COMMIT_DATE = self.sourceInfo.lastModifiedDate or "1970-01-01";
                 VERGEN_GIT_COMMIT_TIMESTAMP = toString (self.sourceInfo.lastModified or 0);
-                VERGEN_GIT_DIRTY = if self.dirtyRev != null then "true" else "false";
+                VERGEN_GIT_DIRTY = lib.boolToString(self ? dirtyRev);
                 VERGEN_GIT_BRANCH = "main";
 
                 # Build info
