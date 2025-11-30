@@ -139,6 +139,24 @@
                 mkdir -p www/build
                 cp -r ${www} www/build
               '';
+
+              # NOTE: This makes build non-deterministic. It might be worth making builds in some contexts
+              # purely deterministic, or at least provide an override to disable the injection of these
+              # environment variables
+              env = {
+                # Git info
+                VERGEN_GIT_SHA = builtins.replaceStrings ["-dirty"] [""] (self.rev or self.dirtyRev or "unknown");
+                VERGEN_GIT_COMMIT_COUNT = toString (self.sourceInfo.revCount or 0);
+                VERGEN_GIT_COMMIT_DATE = self.sourceInfo.lastModifiedDate or "1970-01-01";
+                VERGEN_GIT_COMMIT_TIMESTAMP = toString (self.sourceInfo.lastModified or 0);
+                VERGEN_GIT_DIRTY = if self.dirtyRev != null then "true" else "false";
+                VERGEN_GIT_BRANCH = "main";
+
+                # Build info
+                VERGEN_RUSTC_VERSION = pkgs.rustc.version;
+                VERGEN_CARGO_VERSION = pkgs.cargo.version;
+                VERGEN_PROFILE = "release";
+              };
             }
           );
 
@@ -181,16 +199,19 @@
           config = {
             Entrypoint = [ "/usr/local/bin/ssh-portfolio" ];
             Cmd = [
-              "--host" "0.0.0.0"
-              "--web-port" "8080"
-              "--ssh-port" "2222"
+              "--host"
+              "0.0.0.0"
+              "--web-port"
+              "8080"
+              "--ssh-port"
+              "2222"
             ];
-            
+
             ExposedPorts = {
               "8080/tcp" = { };
               "2222/tcp" = { };
             };
-            
+
             User = "1000:1000";
             WorkingDir = "/home/runner";
           };
