@@ -33,9 +33,6 @@ jobs:
     name: CI - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Free disk space
         uses: easimon/maximize-build-space@v10
         with:
@@ -44,6 +41,9 @@ jobs:
           remove-dotnet: true
           remove-android: true
           remove-haskell: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
       
       - name: Install nix
         uses: nixbuild/nix-quick-install-action@v33
