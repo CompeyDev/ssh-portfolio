@@ -38,6 +38,7 @@
         craneLib = (crane.mkLib pkgs).overrideToolchain (
           toolchain:
           toolchain.rust-bin.nightly."2025-06-20".default.override {
+            targets = [ "x86_64-unknown-linux-musl" ];
             extensions = [
               "clippy"
               "rust-analyzer"
@@ -87,6 +88,10 @@
             zlib
             bun
           ];
+
+          # Statically compile with MUSL for minimally sized binaries
+          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
         };
 
         # Apply patches located in the `./patches/` dir
@@ -145,12 +150,59 @@
           }
         );
 
+        # --- Docker Image ---
+        dockerImage = pkgs.dockerTools.buildImage {
+          name = "ssh-portfolio";
+          tag = "latest";
+
+          copyToRoot = pkgs.buildEnv {
+            name = "image-root";
+            paths = [
+              (pkgs.runCommand "ssh-portfolio" { } ''
+                mkdir -p $out/usr/local/bin
+                cp ${ssh-portfolio}/bin/ssh-portfolio $out/usr/local/bin/
+              '')
+            ];
+
+            pathsToLink = [
+              "/usr"
+              "/etc"
+              "/home"
+            ];
+          };
+
+          runAsRoot = ''
+            mkdir -p /home/runner
+            echo "runner:x:1000:1000::/home/runner:" > /etc/passwd
+            echo "runner:x:1000:" > /etc/group
+            chown -R 1000:1000 /home/runner
+          '';
+
+          config = {
+            Entrypoint = [ "/usr/local/bin/ssh-portfolio" ];
+            Cmd = [
+              "--host" "0.0.0.0"
+              "--web-port" "8080"
+              "--ssh-port" "2222"
+            ];
+            
+            ExposedPorts = {
+              "8080/tcp" = { };
+              "2222/tcp" = { };
+            };
+            
+            User = "1000:1000";
+            WorkingDir = "/home/runner";
+          };
+        };
+
       in
       {
         apps.default = flake-utils.lib.mkApp { drv = ssh-portfolio; };
         packages = {
           default = ssh-portfolio;
           inherit ssh-portfolio;
+          docker = dockerImage;
         };
 
         checks = {
