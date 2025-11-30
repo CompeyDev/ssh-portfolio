@@ -33,18 +33,12 @@ jobs:
     name: CI - ${{ matrix.runner }}${{ matrix.features != '' && format(' ({0})', matrix.features) || '' }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: Free disk space
-        uses: easimon/maximize-build-space@v10
-        with:
-          temp-reserve-mb: 512
-          swap-size-mb: 2048
-          remove-dotnet: true
-          remove-android: true
-          remove-haskell: true
-
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
+      - name: Free disk space
+        run: ./.github/workflows/scripts/free_space.sh
+
       - name: Install nix
         uses: nixbuild/nix-quick-install-action@v33
       
