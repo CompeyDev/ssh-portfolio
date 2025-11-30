@@ -145,7 +145,9 @@
               # environment variables
               env = {
                 # Git info
-                VERGEN_GIT_SHA = builtins.replaceStrings ["-dirty"] [""] (self.rev or self.dirtyRev or "unknown");
+                VERGEN_GIT_SHA = builtins.replaceStrings [ "-dirty" ] [ "" ] (
+                  self.rev or self.dirtyRev or "unknown"
+                );
                 VERGEN_GIT_COMMIT_COUNT = toString (self.sourceInfo.revCount or 0);
                 VERGEN_GIT_COMMIT_DATE = self.sourceInfo.lastModifiedDate or "1970-01-01";
                 VERGEN_GIT_COMMIT_TIMESTAMP = toString (self.sourceInfo.lastModified or 0);
