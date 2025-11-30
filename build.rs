@@ -28,5 +28,15 @@ fn main() -> Result<()> {
         .add_instructions(&build)?
         .add_instructions(&gix)?
         .add_instructions(&cargo)?
-        .emit()
+        .emit_and_set()?;
+
+    // Emit the full formatted version (vX.Y.Z-COMMIT_HASH[-dirty]?)
+    println!(
+        "cargo:rustc-env=PKG_FULL_VERSION=v{}-{}{}",
+        env!("CARGO_PKG_VERSION"),
+        &env!("VERGEN_GIT_SHA")[..7],
+        if env!("VERGEN_GIT_DIRTY") == "true" { "-dirty" } else { "" }
+    );
+
+    Ok(())
 }

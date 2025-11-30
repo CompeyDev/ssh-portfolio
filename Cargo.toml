@@ -101,4 +101,4 @@ shellexpand = "3.1.1"
 [build-dependencies]
 anyhow = "1.0.90"
 atrium-codegen = { git = "https://github.com/atrium-rs/atrium.git", tag = "bsky-sdk-v0.1.21", optional = true }
-vergen-gix = { version = "1.0.2", features = ["build", "cargo"] }
+vergen-gix = { version = "1.0.9", features = ["build", "cargo", "emit_and_set"] }

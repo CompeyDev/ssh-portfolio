@@ -3,17 +3,6 @@ use indoc::formatdoc;
 
 use crate::config::{get_config_dir, get_data_dir};
 
-lazy_static::lazy_static! {
-    pub static ref VERSION: String = {
-        let mut version = format!("v{}-{}", env!("CARGO_PKG_VERSION"), &env!("VERGEN_GIT_SHA")[..7]);
-        if env!("VERGEN_GIT_DIRTY") == "true" {
-            version.push_str("-dirty");
-        }
-
-        version
-    };
-}
-
 #[derive(Parser, Debug)]
 #[command(author, version = version(), about)]
 pub struct Cli {
@@ -40,7 +29,7 @@ pub fn version() -> String {
     let author = clap::crate_authors!();
     let version_message = format!(
         "{} ({}, {})",
-        *VERSION,
+        env!("PKG_FULL_VERSION"),
         env!("VERGEN_GIT_BRANCH"),
         env!("VERGEN_BUILD_DATE")
     );

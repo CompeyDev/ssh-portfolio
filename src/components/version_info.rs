@@ -8,7 +8,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::action::Action;
 use crate::components::Component;
 use crate::config::Config;
-use crate::cli::VERSION;
 
 #[derive(Debug, Default)]
 pub struct VersionInfo {
@@ -27,7 +26,7 @@ impl VersionInfo {
         Line::from(vec![
             Span::styled("󰇁 ", shell_style.dim()),
             Span::styled(env!("CARGO_PKG_NAME"), shell_style.bold()),
-            Span::styled(format!(" ({}@{})", env!("VERGEN_GIT_BRANCH"), *VERSION), Style::new().fg(Color::Green).italic()),
+            Span::styled(format!(" ({}@{})", env!("VERGEN_GIT_BRANCH"), env!("PKG_FULL_VERSION")), Style::new().fg(Color::Green).italic()),
             Span::styled("█", shell_style.add_modifier(Modifier::BOLD | Modifier::RAPID_BLINK)),
         ])
     }
