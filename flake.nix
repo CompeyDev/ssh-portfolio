@@ -94,6 +94,7 @@
           # Statically compile with MUSL for minimally sized binaries
           CARGO_BUILD_TARGET = targetTriple;
           CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
+          hardeningDisable = [ "fortify" ]; # MUSL does not implementation fortification checks
         };
 
         # Apply patches located in the `./patches/` dir
