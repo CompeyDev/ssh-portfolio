@@ -68,5 +68,5 @@ jobs:
         run: nix build --file . ssh-portfolio${CARGO_FEATURES:+-$CARGO_FEATURES} 
 
       - name: Build docker image
-        if: ${{ runner.arch }} != "arm64"
+        if: runner.arch != 'arm64' && runner.arch != 'arm'
         run: nix build .#docker
