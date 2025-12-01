@@ -25,6 +25,7 @@
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
       system:
       let
+        targetTriple = builtins.replaceStrings [ "-linux" ] [ "-unknown-linux-musl" ] system;
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
@@ -33,12 +34,13 @@
           ];
         };
 
+
         # --- Libraries ---
         lib = pkgs.lib;
         craneLib = (crane.mkLib pkgs).overrideToolchain (
           toolchain:
           toolchain.rust-bin.nightly."2025-06-20".default.override {
-            targets = [ "x86_64-unknown-linux-musl" ];
+            targets = [ targetTriple ];
             extensions = [
               "clippy"
               "rust-analyzer"
@@ -90,7 +92,7 @@
           ];
 
           # Statically compile with MUSL for minimally sized binaries
-          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          CARGO_BUILD_TARGET = targetTriple;
           CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
         };
 
