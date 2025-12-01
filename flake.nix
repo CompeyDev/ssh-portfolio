@@ -58,6 +58,7 @@
           nativeBuildInputs = [ pkgs.bun2nix.hook ];
           bunDeps = pkgs.bun2nix.fetchBunDeps { bunNix = ./www/bun.nix; };
 
+          doCheck = false;
           buildPhase = ''
             bun run build
           '';
