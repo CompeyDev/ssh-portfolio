@@ -68,4 +68,4 @@ jobs:
         run: nix build --file . ssh-portfolio${CARGO_FEATURES:+-$CARGO_FEATURES} 
 
       - name: Build docker image
-        run: nix develop -c docker build -t ssh-portfolio --build-arg CARGO_FEATURES=$CARGO_FEATURES .
+        run: nix build .#docker
