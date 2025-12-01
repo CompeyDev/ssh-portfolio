@@ -22,17 +22,22 @@
 
 set -eux
 
+dir_stats() {
+  echo "::group::Quick stats for path(s) $@"
+  du -h --apparent-size --max-depth=1 "$@" 2>/dev/null || true
+  echo "::endgroup::"
+}
+
 df -h
-echo "::group::/usr/local/*"
-du -hsc --apparent-size /usr/local/*
-echo "::endgroup::"
+dir_stats /usr/local/*
+
 # ~1GB
 sudo rm -rf \
   /usr/local/aws-sam-cli \
   /usr/local/julia* || :
-echo "::group::/usr/local/bin/*"
-du -hsc --apparent-size /usr/local/bin/*
-echo "::endgroup::"
+
+dir_stats /usr/local/bin/*
+
 # ~1GB (From 1.2GB to 214MB)
 sudo rm -rf \
   /usr/local/bin/aliyun \
@@ -50,37 +55,38 @@ sudo rm -rf \
   /usr/local/bin/sam \
   /usr/local/bin/stack \
   /usr/local/bin/terraform || :
+
 # 142M
 sudo rm -rf /usr/local/bin/oc || : \
-echo "::group::/usr/local/share/*"
-du -hsc --apparent-size /usr/local/share/*
-echo "::endgroup::"
+
+dir_stats /usr/local/share/*
+
 # 506MB
 sudo rm -rf /usr/local/share/chromium || :
 # 1.3GB
 sudo rm -rf /usr/local/share/powershell || :
-echo "::group::/usr/local/lib/*"
-du -hsc --apparent-size /usr/local/lib/*
-echo "::endgroup::"
+
+dir_stats /usr/local/lib/*
+
 # 15GB
 sudo rm -rf /usr/local/lib/android || :
 # 341MB
 sudo rm -rf /usr/local/lib/heroku || :
 # 1.2GB
 sudo rm -rf /usr/local/lib/node_modules || :
-echo "::group::/opt/*"
-du -hsc --apparent-size /opt/*
-echo "::endgroup::"
+
+dir_stats /opt/*
+
 # 679MB
 sudo rm -rf /opt/az || :
-echo "::group::/opt/microsoft/*"
-du -hsc --apparent-size /opt/microsoft/*
-echo "::endgroup::"
+
+dir_stats /opt/microsoft/*
+
 # 197MB
 sudo rm -rf /opt/microsoft/powershell || :
-echo "::group::/opt/hostedtoolcache/*"
-du -hsc --apparent-size /opt/hostedtoolcache/*
-echo "::endgroup::"
+
+dir_stats /opt/hostedtoolcache/*
+
 # 5.3GB
 sudo rm -rf /opt/hostedtoolcache/CodeQL || :
 # 1.4GB
@@ -89,10 +95,12 @@ sudo rm -rf /opt/hostedtoolcache/go || :
 sudo rm -rf /opt/hostedtoolcache/PyPy || :
 # 376MB
 sudo rm -rf /opt/hostedtoolcache/node || :
+
 # Remove Web browser packages
 sudo apt-get purge -y firefox
 # google-chrome-stable isn't installed on arm64 image.
 sudo apt-get purge -y google-chrome-stable || :
 # microsoft-edge-stable isn't installed on arm64 image.
 sudo apt-get purge -y microsoft-edge-stable || :
+
 df -h
