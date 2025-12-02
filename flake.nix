@@ -134,13 +134,13 @@
             commonCraneArgs
             // {
               inherit cargoArtifacts cargoVendorDir;
-              doChecks = false;
+              doCheck = false;
               cargoExtraArgs = "--locked --no-default-features ${
                 lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
               }";
               preBuild = ''
                 mkdir -p www/build
-                cp -r ${www} www/build
+                cp -r ${www}/* www/build
               '';
 
               # NOTE: This makes build non-deterministic. It might be worth making builds in some contexts
