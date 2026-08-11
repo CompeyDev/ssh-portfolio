@@ -19,20 +19,26 @@ use crate::tui::Event;
 mod blog;
 mod cards;
 mod cat;
+mod chrome;
+mod client_info;
 mod content;
+mod footer;
+mod help;
 #[cfg(feature = "blog")]
 mod selection_list;
-mod version_info;
 mod tabs;
 
 #[cfg(feature = "blog")]
 pub use blog::*;
 pub use cards::*;
 pub use cat::*;
+pub use chrome::*;
+pub use client_info::*;
 pub use content::*;
+pub use footer::*;
+pub use help::*;
 #[cfg(feature = "blog")]
 pub use selection_list::*;
-pub use version_info::*;
 pub use tabs::*;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.

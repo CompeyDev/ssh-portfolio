@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
@@ -46,8 +46,16 @@ pub struct App {
     cat: Arc<Mutex<Cat>>,
     #[cfg(feature = "blog")]
     blog_posts: Arc<Mutex<BlogPosts>>,
-    version_info: Arc<Mutex<VersionInfo>>,
+    footer: Arc<Mutex<Footer>>,
+    client_info: Arc<Mutex<ClientInfo>>,
+    help: Arc<Mutex<Help>>,
 }
+
+pub const TABS: [&str; 3] = ["about", "projects", "blog"];
+
+const PROSE_SIZE: u16 = 76; // banner + intro paragraph without wrapping
+const RAIL_GUTTER: u16 = 2; // gap between prose and rail
+const CAT_RESERVE: u16 = 3; // area reserved for the cat component where nothing else is drawn
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Mode {
@@ -69,11 +77,8 @@ impl App {
 
         // Initialize components
         let active_tab = Arc::new(AtomicUsize::new(0));
-        let tabs = Arc::new(Mutex::new(Tabs::new(
-            vec!["about", "projects", "blog"],
-            Arc::clone(&active_tab),
-        )));
-        let content = Arc::new(Mutex::new(Content::new(active_tab)));
+        let tabs = Arc::new(Mutex::new(Tabs::new(TABS.to_vec(), Arc::clone(&active_tab))));
+        let content = Arc::new(Mutex::new(Content::new(Arc::clone(&active_tab))));
 
         let cat = Arc::new(Mutex::new(Cat::new()));
 
@@ -84,7 +89,9 @@ impl App {
             rt.block_on(content.try_lock()?.blog_content())?,
         )));
 
-        let version_info = Arc::new(Mutex::new(VersionInfo::new()));
+        let footer = Arc::new(Mutex::new(Footer::new(active_tab)));
+        let client_info = Arc::new(Mutex::new(ClientInfo::new()));
+        let help = Arc::new(Mutex::new(Help::new()));
 
         Ok(Self {
             terminal_info,
@@ -108,7 +115,9 @@ impl App {
             cat,
             #[cfg(feature = "blog")]
             blog_posts,
-            version_info,
+            footer,
+            client_info,
+            help,
         })
     }
 
@@ -144,7 +153,7 @@ impl App {
             self.cat.try_lock()?.register_config_handler(self.config.clone())?;
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.register_config_handler(self.config.clone())?;
-            self.version_info.try_lock()?.register_config_handler(self.config.clone())?;
+            self.help.try_lock()?.register_config_handler(self.config.clone())?;
 
             for _ in 1..5 {
                 if matches!(
@@ -163,7 +172,9 @@ impl App {
             self.cat.try_lock()?.init(self.terminal_info.clone(), size)?;
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.init(self.terminal_info.clone(), size)?;
-            self.version_info.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.footer.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.client_info.try_lock()?.init(self.terminal_info.clone(), size)?;
+            self.help.try_lock()?.init(self.terminal_info.clone(), size)?;
 
             Ok::<_, eyre::Error>(())
         })?;
@@ -181,6 +192,7 @@ impl App {
                     resume_tx = Some(tui.suspend().await?);
                     continue;
                 }
+
                 action_tx.send(Action::Resume)?;
                 action_tx.send(Action::ClearScreen)?;
                 block_in_place(|| tui.enter())?;
@@ -210,9 +222,11 @@ impl App {
                 if let Some(action) = self.tabs.try_lock()?.handle_events(Some(event.clone()))? {
                     action_tx.send(action)?;
                 }
+
                 if let Some(action) = self.content.try_lock()?.handle_events(Some(event.clone()))? {
                     action_tx.send(action)?;
                 }
+
                 if let Some(action) = self.cat.try_lock()?.handle_events(Some(event.clone()))? {
                     action_tx.send(action)?;
                 }
@@ -227,6 +241,7 @@ impl App {
                 self.action_tx.send(Action::Resize(width, height))?;
             }
         }
+
         Ok(())
     }
 
@@ -235,6 +250,7 @@ impl App {
         let Some(keymap) = self.config.keybindings.get(&self.mode) else {
             return Ok(());
         };
+
         match keymap.get(&vec![key]) {
             Some(action) => {
                 debug!("Got action: {action:?}");
@@ -248,6 +264,7 @@ impl App {
                 }
             }
         }
+
         Ok(())
     }
 
@@ -256,14 +273,23 @@ impl App {
             if action != Action::Tick && action != Action::Render {
                 debug!("{action:?}");
             }
+
             match action {
                 Action::Tick => {
                     self.last_tick_key_events.drain(..);
                 }
-                #[cfg(feature = "blog")]
-                Action::Quit => self.should_quit = !self.blog_posts.try_lock()?.is_in_post(),
-                #[cfg(not(feature = "blog"))]
-                Action::Quit => self.should_quit = true,
+
+                // Esc and q back out of whatever is on top before they quit. The
+                // components clear their own state when they see `Quit` below, so this
+                // must read the state *before* the broadcast.
+                Action::Quit => {
+                    #[cfg(feature = "blog")]
+                    let nested = self.blog_posts.try_lock()?.is_in_post();
+                    #[cfg(not(feature = "blog"))]
+                    let nested = false;
+
+                    self.should_quit = !nested && !self.help.try_lock()?.is_visible();
+                }
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
                 Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
@@ -279,9 +305,11 @@ impl App {
             if let Some(action) = self.tabs.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
+
             if let Some(action) = self.content.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
+
             if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
@@ -290,7 +318,20 @@ impl App {
             if let Some(action) = self.blog_posts.try_lock()?.update(action.clone())? {
                 self.action_tx.send(action)?;
             }
+
+            if let Some(action) = self.footer.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
+
+            if let Some(action) = self.client_info.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
+
+            if let Some(action) = self.help.try_lock()?.update(action.clone())? {
+                self.action_tx.send(action)?;
+            }
         }
+
         Ok(())
     }
 
@@ -353,105 +394,120 @@ impl App {
         }
 
         term.try_draw(|frame| {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
-                .split(frame.area());
+            let full = frame.area();
+            let [header, body, footer_area] = Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .areas(full);
 
             // Render the domain name text
-            let title = Paragraph::new(Line::from(Span::styled(
-                "devcomp.xyz ",
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
-            )));
-
             frame.render_widget(
-                title,
-                Rect { x: chunks[0].x + 2, y: chunks[0].y + 2, width: 14, height: 1 },
+                Paragraph::new(Line::from(Span::styled(
+                    "devcomp.xyz ",
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ))),
+                Rect { x: header.x + 2, y: header.y + 2, width: 14, height: 1 },
             );
 
             // Render the tabs
             let mut tabs = self.tabs.try_lock().map_err(std::io::Error::other)?;
-
+            let current_tab = tabs.current_tab();
             tabs.draw(
                 frame,
                 Rect {
-                    x: chunks[0].x + 14,
-                    y: chunks[0].y + 1,
-                    width: chunks[0].width - 6,
-                    height: chunks[0].height,
+                    x: header.x + TAB_BAR_X,
+                    y: header.y + 1,
+                    width: header.width.saturating_sub(TAB_BAR_X),
+                    height: header.height,
                 },
             )
             .map_err(std::io::Error::other)?;
+            drop(tabs);
 
-            // Render version and uptime version info
-            self.version_info
-                .try_lock()
-                .map_err(std::io::Error::other)?
-                .draw(
-                    frame,
-                    Rect {
-                        x: chunks[0].x,
-                        y: chunks[0].y + 1,
-                        width: chunks[0].width - 2,
-                        height: 1,
-                    },
-                )
-                .map_err(std::io::Error::other)?;
+            // Render the frame
+            let inner = content_frame(frame, body, &TABS, current_tab);
+            let mut content_area = inner.inner(Margin { horizontal: 2, vertical: 1 });
 
-            // Render the content
-            let content_rect = Rect {
-                x: chunks[1].x,
-                y: chunks[1].y,
-                width: chunks[0].width,
-                height: frame.area().height - chunks[0].height,
-            };
+            if current_tab != Tabs::ABOUT {
+                // About tab is short, so the cat can render however, but for other tabs
+                // we need to reserve space for the cat so it does not overlap with the
+                // tab's contents
+                content_area.height = content_area.height.saturating_sub(CAT_RESERVE);
+            }
 
-            self.content
-                .try_lock()
-                .map_err(std::io::Error::other)?
-                .draw(frame, content_rect)
-                .map_err(std::io::Error::other)?;
+            // The about page gets a right-hand rail, but only where there is space
+            if current_tab == Tabs::ABOUT
+                && content_area.width >= PROSE_SIZE + PANEL_WIDTH + RAIL_GUTTER
+            {
+                let [prose, rail] =
+                    Layout::horizontal([Constraint::Min(0), Constraint::Length(PANEL_WIDTH)])
+                        .areas(content_area);
 
-            // Render the eepy cat :3
-            self.cat
-                .try_lock()
-                .map_err(std::io::Error::other)?
-                .draw(frame, frame.area())
-                .map_err(std::io::Error::other)?;
+                self.client_info
+                    .try_lock()
+                    .map_err(std::io::Error::other)?
+                    .draw(frame, Rect { height: 6.min(rail.height), ..rail })
+                    .map_err(std::io::Error::other)?;
 
-            if tabs.current_tab() == 2 {
-                let mut content_rect = content_rect;
-                content_rect.x += 1;
-                content_rect.y += 1;
-                content_rect.width -= 2;
-                content_rect.height -= 2;
+                content_area =
+                    Rect { width: prose.width.saturating_sub(RAIL_GUTTER), ..prose };
+            }
 
+            if current_tab == Tabs::BLOG {
                 #[cfg(feature = "blog")]
                 {
                     // Render the post selection list if the blog tab is selected
                     self.blog_posts
                         .try_lock()
                         .map_err(std::io::Error::other)?
-                        .draw(frame, content_rect)
+                        .draw(frame, content_area)
                         .map_err(std::io::Error::other)?;
                 }
 
                 #[cfg(not(feature = "blog"))]
                 {
-                    // If blog feature is not enabled, render a placeholder
-                    content_rect.height = 1;
                     let placeholder = Paragraph::new(
-                        "Blog feature is disabled. Enable the `blog` feature to view this \
+                        "blog feature is disabled. enable the `blog` feature to view this \
                          tab.",
                     )
                     .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
 
-                    frame.render_widget(placeholder, content_rect);
+                    frame.render_widget(placeholder, Rect { height: 1, ..content_area });
                 }
+            } else {
+                self.content
+                    .try_lock()
+                    .map_err(std::io::Error::other)?
+                    .draw(frame, content_area)
+                    .map_err(std::io::Error::other)?;
             }
+
+            // Render the eepy cat :3
+            self.cat
+                .try_lock()
+                .map_err(std::io::Error::other)?
+                .draw(frame, body)
+                .map_err(std::io::Error::other)?;
+
+            // Render the footer, minus the cat
+            self.footer
+                .try_lock()
+                .map_err(std::io::Error::other)?
+                .draw(frame, footer_area)
+                .map_err(std::io::Error::other)?;
+
+            // The help overlay sits above everything else
+            self.help
+                .try_lock()
+                .map_err(std::io::Error::other)?
+                .draw(frame, full)
+                .map_err(std::io::Error::other)?;
 
             Ok::<_, std::io::Error>(())
         })?;
+
         Ok(())
     }
 }

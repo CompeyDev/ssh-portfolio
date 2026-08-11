@@ -1,19 +1,29 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
 use figlet_rs::FIGfont;
 use ratatui::prelude::*;
-use ratatui::widgets::*;
-use tokio::sync::mpsc::UnboundedSender;
+use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap};
 
-use super::Component;
+use super::{Card, CardGrid, Component};
 use crate::action::Action;
-use crate::components::Card;
 #[cfg(feature = "blog")]
 use crate::components::Post;
-use crate::config::Config;
+use crate::components::Tabs;
+
+static BANNER: LazyLock<Vec<String>> = LazyLock::new(|| {
+    FIGfont::from_content(include_str!("../../assets/drpepper.flf"))
+        .expect("embedded figlet font is malformed")
+        .convert("hiya!")
+        .expect("figlet conversion produced no output")
+        .to_string()
+        .trim_end_matches('\n')
+        .split('\n')
+        .map(String::from)
+        .collect()
+});
 
 #[allow(dead_code)]
 pub(super) fn truncate(s: &str, max: usize) -> String {
@@ -22,216 +32,153 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
         .map_or(s.to_string(), |(idx, _)| s[..idx].to_string() + "...")
 }
 
-#[derive(Default)]
 pub struct Content {
-    command_tx: Option<UnboundedSender<Action>>,
-    config: Config,
     selected_tab: Arc<AtomicUsize>,
+    projects: CardGrid<'static>,
+    about_scroll: u16,
 }
-
-// TODO: Use layouts and make this ugly
 
 impl Content {
     pub fn new(selected_tab: Arc<AtomicUsize>) -> Self {
-        Self { selected_tab, ..Default::default() }
+        let projects = CardGrid::new(Self::projects(), Arc::clone(&selected_tab));
+        Self { selected_tab, projects, about_scroll: 0 }
     }
 
-    /// Generate the content for the "About" tab
-    fn about_content(&self, area: Rect) -> Result<Vec<Line<'static>>> {
-        let greetings_header =
-            FIGfont::from_content(include_str!("../../assets/drpepper.flf"))
-                .map_err(|err| eyre!(err))?
-                .convert("hiya!")
-                .ok_or(eyre!("Failed to create figlet header for about page"))?
-                .to_string();
+    fn on_about(&self) -> bool {
+        self.selected_tab.load(Ordering::Relaxed) == Tabs::ABOUT
+    }
 
-        let lines: Vec<String> =
-            greetings_header.trim_end_matches('\n').split('\n').map(String::from).collect();
+    fn heading(label: &str, width: u16) -> Line<'static> {
+        const RULE_END: usize = 62;
+        let used = label.chars().count() + 3;
+        let rule_len = RULE_END.min(width as usize).saturating_sub(used);
 
-        let mut content = lines
-            .iter()
-            .enumerate()
-            .map(|(pos, line)| {
-                if pos == lines.len() - 3 {
-                    return Line::from(vec![
-                        Span::from(" "),
-                        Span::from(line.clone()),
-                        Span::from("  I'm Erica ("),
-                        Span::styled(
-                            "she/they",
-                            Style::default().add_modifier(Modifier::ITALIC),
-                        ),
-                        Span::from("), and I make scalable systems or something. IDFK."),
-                    ]);
-                } else if pos == lines.len() - 2 {
-                    return Line::from(vec![
-                        Span::from(" "),
-                        Span::from(line.clone()),
-                        Span::from("      "),
-                        //  hi@devcomp.xyz   @CompeyDev   @devcomp.xyz   @DevComp_
-                        Span::styled(" ", Style::default().fg(Color::Cyan)),
-                        Span::from("hi@devcomp.xyz"),
-                        Span::from("  "),
-                        Span::styled(" ", Style::default().fg(Color::LightMagenta)),
-                        Span::from("@CompeyDev"),
-                        Span::from("  "),
-                        Span::styled(" ", Style::default().fg(Color::Blue)),
-                        Span::from("@devcomp.xyz"),
-                        Span::from("  "),
-                        Span::styled(" ", Style::default().fg(Color::LightBlue)),
-                        Span::from("@DevComp_"),
-                    ])
-                    .add_modifier(Modifier::BOLD);
-                }
+        Line::from(vec![
+            Span::styled(
+                format!("  {label} "),
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("─".repeat(rule_len), Style::default().fg(Color::DarkGray)),
+        ])
+    }
 
-                Line::raw(format!(" {line}"))
-                    .style(Style::default().add_modifier(Modifier::BOLD))
-            })
-            .collect::<Vec<Line<'static>>>();
-
-        content.extend(vec![
-            Line::default(),
+    fn intro() -> Vec<Line<'static>> {
+        vec![
             Line::from(vec![
-                Span::from(" "),
-                Span::from("I specialize in systems programming, primarily in "),
+                Span::from("i'm "),
                 Span::styled(
-                    "Rust 🦀",
-                    Style::default()
-                        .fg(Color::LightRed)
-                        .add_modifier(Modifier::BOLD | Modifier::ITALIC),
+                    "erica",
+                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
                 ),
-                Span::from(" and "),
-                Span::styled(
-                    "Luau 🦭",
-                    Style::default()
-                        .fg(Color::LightBlue)
-                        .add_modifier(Modifier::BOLD | Modifier::ITALIC),
-                ),
-                Span::from("."),
+                Span::from(" ("),
+                Span::styled("she/they", Style::default().add_modifier(Modifier::ITALIC)),
+                Span::from("). i build systems software,"),
             ]),
-            Line::from(""),
-            Line::from(
-                " I am an avid believer of open-source software, and contribute to a few \
-                 projects such as:",
-            ),
-        ]);
+            Line::from("mostly in rust and luau, and you're reading this"),
+            Line::from("over ssh, which covers most of what i'd claim in"),
+            Line::from("a paragraph here anyway."),
+        ]
+    }
 
-        let projects = vec![
-            (
-                Style::default().fg(Color::LightMagenta).add_modifier(Modifier::BOLD),
-                "lune-org/lune: A standalone Luau runtime",
-            ),
-            (
-                Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
-                "DiscordLuau/discord-luau: A Luau library for creating Discord bots, powered \
-                 by Lune",
-            ),
-            (
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-                "pesde-pkg/pesde: A multi-runtime package manager for the Luau programming \
-                 language",
-            ),
-        ];
+    #[rustfmt::skip]
+    fn socials() -> Line<'static> {
+        let sep = Span::styled("  ", Style::default().fg(Color::DarkGray));
+        Line::from(vec![
+            Span::styled(" ", Style::default().fg(Color::Cyan)),
+            Span::from("hi@devcomp.xyz"), sep.clone(),
+            Span::styled(" ", Style::default().fg(Color::LightMagenta)),
+            Span::from("@CompeyDev"), sep.clone(),
+            Span::styled(" ", Style::default().fg(Color::Blue)),
+            Span::from("@devcomp.xyz"), sep,
+            Span::styled(" ", Style::default().fg(Color::LightBlue)),
+            Span::from("@DevComp_"),
+        ])
+        .style(Style::default().add_modifier(Modifier::BOLD))
+    }
 
-        for (style, project) in projects {
-            let parts: Vec<&str> = project.splitn(2, ':').collect();
-            let (left, right) =
-                if parts.len() == 2 { (parts[0], parts[1]) } else { (project, "") };
+    #[rustfmt::skip]
+    fn contributions() -> Vec<(&'static str, Style, &'static str)> {
+        vec![
+            ("lune-org/lune",            Style::new().fg(Color::LightMagenta), "a standalone luau runtime"),
+            ("pesde-pkg/pesde",          Style::new().fg(Color::Yellow),       "a multi-runtime package manager for luau"),
+            ("DiscordLuau/discord-luau", Style::new().fg(Color::Blue),         "a luau library for discord bots"),
+        ]
+    }
 
-            let formatted_left = Span::styled(left, style);
+    fn about_body(&self, width: u16) -> Vec<Line<'static>> {
+        let body = Style::default().fg(Color::White);
+        let dim = Style::default().fg(Color::DarkGray);
 
-            let bullet = " • ";
-            let indent = "   ";
+        let mut lines = vec![Self::socials(), Line::default()];
 
-            let first_line = if project.len() > area.width as usize - bullet.len() {
-                let split_point = project
-                    .char_indices()
-                    .take_while(|(i, _)| *i < area.width as usize - bullet.len())
-                    .last()
-                    .map(|(i, _)| i)
-                    .unwrap_or(project.len());
-                let (first, rest) = project.split_at(split_point);
-                content.push(Line::from(vec![
-                    Span::from(bullet),
-                    formatted_left,
-                    Span::from(":"),
-                    Span::styled(
-                        first.trim_start_matches(format!("{left}:").as_str()).to_string(),
-                        Style::default().fg(Color::White),
-                    ),
-                ]));
-                rest.to_string()
-            } else {
-                content.push(Line::from(vec![
-                    Span::from(bullet),
-                    formatted_left,
-                    Span::from(":"),
-                    Span::styled(right.to_string(), Style::default().fg(Color::White)),
-                ]));
-                String::new()
-            };
+        lines.push(Self::heading("now", width));
+        lines.push(Line::styled("  (what i'm working on this month)", dim));
+        lines.push(Line::default());
+        // TODO: fetch something new every month, maybe using atproto or github
 
-            let mut remaining_text = first_line;
-            while !remaining_text.is_empty() {
-                if remaining_text.len() > area.width as usize - indent.len() {
-                    let split_point = remaining_text
-                        .char_indices()
-                        .take_while(|(i, _)| *i < area.width as usize - indent.len())
-                        .last()
-                        .map(|(i, _)| i)
-                        .unwrap_or(remaining_text.len());
-                    let (first, rest) = remaining_text.split_at(split_point);
-                    content.push(Line::from(vec![
-                        Span::from(indent),
-                        Span::styled(first.to_string(), Style::default().fg(Color::White)),
-                    ]));
-                    remaining_text = rest.to_string();
-                } else {
-                    content.push(Line::from(vec![
-                        Span::from(indent),
-                        Span::styled(
-                            remaining_text.clone(),
-                            Style::default().fg(Color::White),
-                        ),
-                    ]));
-                    remaining_text.clear();
-                }
-            }
+        lines.push(Self::heading("i maintain / contribute to", width));
+        let name_col = Self::contributions()
+            .iter()
+            .map(|(name, ..)| name.chars().count())
+            .max()
+            .unwrap_or(0);
+        for (name, style, blurb) in Self::contributions() {
+            let pad = " ".repeat(name_col.saturating_sub(name.chars().count()));
+            lines.push(Line::from(vec![
+                Span::styled("   • ", dim),
+                Span::styled(name, style.add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{pad}   {blurb}"), body),
+            ]));
         }
 
-        content.extend(vec![
-            Line::from(""),
-            Line::from(
-                " I am also a fan of the 8 bit aesthetic and think seals are super adorable \
-                 :3",
-            ),
-        ]);
+        lines.push(Line::styled("    my own things are on the next tab →", dim));
+        lines.push(Line::default());
 
-        Ok(content)
+        lines.push(Self::heading("this thing", width));
+        lines.push(Line::from(vec![
+            Span::styled("  ", dim),
+            Span::styled(env!("PKG_LOC"), Style::default().fg(Color::LightRed)),
+            Span::styled(" lines of rust. russh for transport, ratatui for drawing,", body),
+        ]));
+        lines.push(Line::styled(
+            "  atproto for the blog. no http except the landing page.",
+            body,
+        ));
+        lines
+            .push(Line::styled(format!("  agpl-3.0 · {}", env!("CARGO_PKG_REPOSITORY")), dim));
+        lines.push(Line::default());
+
+        lines.push(Line::styled("  (availability)", dim));
+        lines.extend(vec![
+            Line::from(
+                "  currently a student, and not looking for work. feel free to reach out",
+            ),
+            Line::from("  via any one of my above socials if you'd like to have a chat!"),
+        ]);
+        lines.push(Line::default());
+
+        lines.push(Line::styled(
+            "  huge fan of 8 bit aesthetics, seals and the color purple <3",
+            Style::default().fg(Color::LightMagenta),
+        ));
+
+        lines
     }
 
-    /// Generate the content for the "Projects" tab
+    /// The project cards.
     #[rustfmt::skip]
-    fn projects_content(&self) -> Vec<Card<'static>> {
+    fn projects() -> Vec<Card<'static>> {
+        // TODO: we could have an array of repos and fetch details lazily at runtime
         vec![
             Card { title: " 0x5eal/luau-unzip", description: "Unzip implementation in pure Luau" },
-            Card {
-                title: " CompeyDev/discord-status-action",
-                description: "GitHub action to update your discord status in a file using the Lanyard API",
-            },
+            Card { title: " CompeyDev/discord-status-action", description: "GitHub action to update your discord status in a file using the Lanyard API" },
             Card { title: " CompeyDev/bad-apple-efi", description: "An EFI application to play the silly video" },
             Card { title: " CompeyDev/lei", description: "🌸 A collection of Go bindings to Luau" },
             Card { title: " 0x5eal/wg-lua", description: "A Lua implementation of the wireguard keygen algorithm" },
             Card { title: " 0x5eal/semver-luau", description: "Strongly typed semver parser for Luau" },
             Card { title: " CompeyDev/elytra-lock-fabric", description: "Client-side fabric mod to lock elytra usage using a keybind" },
-            Card {
-                title: " CompeyDev/touch-grass-reminder",
-                description: "Client-side quilt mod which warns players when they have been excessively playing Minecraft"
-            },
-            Card {
-                title: " CompeyDev/stinky-mod",
-                description: "Server-side fabric mod featuring (mostly) customizable randomized join, leave, death, and MOTD messages",
-            },
+            Card { title: " CompeyDev/touch-grass-reminder", description: "Client-side quilt mod which warns players when they have been excessively playing Minecraft" },
+            Card { title: " CompeyDev/stinky-mod", description: "Server-side fabric mod featuring (mostly) customizable randomized join, leave, death, and MOTD messages" },
             Card { title: " CompeyDev/lune-luau-template", description: "A simple template for initializing Luau projects with Lune" },
             Card { title: " CompeyDev/frktest-pesde", description: "A basic test framework for Lune (now with pesde support!)" },
             Card { title: " CompeyDev/cull-less-leaves", description: "1.21 release fork | Cull leaves while looking hot!" },
@@ -249,115 +196,98 @@ impl Content {
             .map(|post| Arc::new(post.clone()))
             .collect())
     }
+
+    fn draw_about(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        let banner_width = BANNER
+            .iter()
+            .map(|line| line.chars().count())
+            .max()
+            .ok_or(eyre!("Figlet banner produced no lines"))?
+            as u16;
+        let banner_height = BANNER.len() as u16;
+
+        let [head, _, body] = Layout::vertical([
+            Constraint::Length(banner_height),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(area);
+
+        let [banner_area, intro_area] =
+            Layout::horizontal([Constraint::Length(banner_width + 2), Constraint::Min(0)])
+                .areas(head);
+
+        let banner = BANNER.iter().map(|line| Line::from(line.clone()));
+        frame.render_widget(
+            Paragraph::new(banner.collect::<Vec<_>>())
+                .style(Style::default().add_modifier(Modifier::BOLD)),
+            banner_area,
+        );
+
+        let intro = Self::intro();
+        let intro_y = intro_area.y + banner_height.saturating_sub(intro.len() as u16);
+        frame.render_widget(
+            Paragraph::new(intro).wrap(Wrap { trim: false }),
+            Rect { y: intro_y, height: intro_area.bottom() - intro_y, ..intro_area },
+        );
+
+        // Scrolling if its larger the frame size
+        let text_width = body.width.saturating_sub(1);
+        let lines = self.about_body(text_width);
+        let overflow = (lines.len() as u16).saturating_sub(body.height);
+        self.about_scroll = self.about_scroll.min(overflow);
+
+        let [text_area, bar_area] =
+            Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(body);
+
+        frame.render_widget(
+            Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((self.about_scroll, 0)),
+            text_area,
+        );
+
+        if overflow > 0 {
+            let mut state =
+                ScrollbarState::new(overflow as usize).position(self.about_scroll as usize);
+            frame.render_stateful_widget(
+                Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(None)
+                    .end_symbol(None)
+                    .track_symbol(Some("│"))
+                    .thumb_symbol("┃")
+                    .style(Style::default().fg(Color::DarkGray))
+                    .thumb_style(Style::default().fg(Color::Magenta)),
+                bar_area,
+                &mut state,
+            );
+        }
+
+        Ok(())
+    }
 }
 
 impl Component for Content {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.command_tx = Some(tx);
-        Ok(())
-    }
-
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
-        self.config = config;
-        Ok(())
-    }
-
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Tick => {}
             Action::Render => {}
+            Action::SelectNext if self.on_about() => {
+                self.about_scroll = self.about_scroll.saturating_add(1)
+            }
+            Action::SelectPrev if self.on_about() => {
+                self.about_scroll = self.about_scroll.saturating_sub(1)
+            }
             _ => {}
         }
-        Ok(None)
+
+        self.projects.update(action)
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
-        let selected_tab = self.selected_tab.load(Ordering::Relaxed);
-
-        // Create the border lines
-        let mut border_top = Line::default();
-        border_top.spans.push(Span::styled("╭", Style::default().fg(Color::DarkGray)));
-
-        let devcomp_width = 13;
-        border_top.spans.push(Span::styled(
-            "─".repeat(devcomp_width),
-            Style::default().fg(Color::DarkGray),
-        ));
-
-        let tabs = ["about", "projects", "blog"];
-        let mut current_pos = 1 + devcomp_width;
-
-        for (i, &tab) in tabs.iter().enumerate() {
-            let (char, style) = if i == self.selected_tab.load(Ordering::Relaxed) {
-                ("━", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
-            } else {
-                ("─", Style::default().fg(Color::DarkGray))
-            };
-
-            let default_style = Style::default().fg(Color::DarkGray);
-
-            border_top.spans.push(Span::styled("┴", default_style));
-            border_top.spans.push(Span::styled("─", default_style));
-            border_top.spans.push(Span::styled(char.repeat(tab.len()), style));
-            border_top.spans.push(Span::styled("─", default_style));
-            border_top.spans.push(Span::styled("┴", default_style));
-
-            current_pos += tab.len() + 4;
-        }
-
-        border_top.spans.push(Span::styled(
-            "─".repeat(area.width as usize - current_pos - 1),
-            Style::default().fg(Color::DarkGray),
-        ));
-
-        border_top.spans.push(Span::styled("╮", Style::default().fg(Color::DarkGray)));
-
-        let border_bottom = Line::from(Span::styled(
-            "╰".to_owned() + &"─".repeat(area.width as usize - 2) + "╯",
-            Style::default().fg(Color::DarkGray),
-        ));
-
-        let border_left = Span::styled("│", Style::default().fg(Color::DarkGray));
-        let border_right = Span::styled("│", Style::default().fg(Color::DarkGray));
-
-        // Render the content
-        let content_area = Rect {
-            x: area.x + 3,
-            y: area.y + 2,
-            width: area.width - 6,
-            height: area.height - 6,
-        };
-
-        if selected_tab == 0 {
-            let widget = Paragraph::new(self.about_content(area)?)
-                .block(Block::default().borders(Borders::NONE))
-                .wrap(Wrap { trim: false });
-            frame.render_widget(widget, content_area);
-        } else if selected_tab == 1 {
-            self.projects_content().draw(frame, content_area)?;
-        } // FIXME: Blog tab handled in `App::render`
-
-        // Render the borders
-        frame.render_widget(
-            Paragraph::new(border_top),
-            Rect { x: area.x, y: area.y, width: area.width, height: 1 },
-        );
-
-        frame.render_widget(
-            Paragraph::new(border_bottom),
-            Rect { x: area.x, y: area.y + area.height - 1, width: area.width, height: 1 },
-        );
-
-        for i in 1..area.height - 1 {
-            frame.render_widget(
-                Paragraph::new(Line::from(border_left.clone())),
-                Rect { x: area.x, y: area.y + i, width: 1, height: 1 },
-            );
-
-            frame.render_widget(
-                Paragraph::new(Line::from(border_right.clone())),
-                Rect { x: area.x + area.width - 1, y: area.y + i, width: 1, height: 1 },
-            );
+        match self.selected_tab.load(Ordering::Relaxed) {
+            Tabs::ABOUT => self.draw_about(frame, area)?,
+            Tabs::PROJECTS => self.projects.draw(frame, area)?,
+            // The blog tab is drawn by `App`, which owns the split-pane layout
+            _ => {}
         }
 
         Ok(())

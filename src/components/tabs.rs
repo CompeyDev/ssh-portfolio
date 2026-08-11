@@ -21,6 +21,10 @@ pub struct Tabs {
 }
 
 impl Tabs {
+    pub const ABOUT: usize = 0;
+    pub const PROJECTS: usize = 1;
+    pub const BLOG: usize = 2;
+
     pub fn new(tabs: Vec<&'static str>, selected_tab: Arc<AtomicUsize>) -> Self {
         Self { tabs, selected_tab, ..Default::default() }
     }

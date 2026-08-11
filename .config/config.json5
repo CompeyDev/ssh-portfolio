@@ -13,6 +13,7 @@
       "<Ctrl-c>": "Quit", // Yet another way to quit
       "<Esc>": "Quit", // Final way to quit
       "<Ctrl-z>": "Suspend", // Suspend the application
+      "<?>": "Help", // Toggle the keybinding overlay
       "<right>": "NextTab", // Go to the next tab
       "<left>": "PrevTab", // Go to the previous tab
       "<down>": "SelectNext", // Go to the next selection in options

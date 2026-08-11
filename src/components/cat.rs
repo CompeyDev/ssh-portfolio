@@ -1,13 +1,12 @@
 use color_eyre::Result;
 use indoc::indoc;
 use ratatui::prelude::*;
-use ratatui::widgets::*;
-use tokio::sync::mpsc::UnboundedSender;
+use ratatui::widgets::Paragraph;
 
 use super::Component;
 use crate::action::Action;
-use crate::config::Config;
 
+const CAT_DIMS: (u16, u16) = (16, 4);
 const CAT_ASCII_ART: &str = indoc! {r#"
       |\__/,|   (`\
       |_ _  |.--.) )
@@ -16,41 +15,41 @@ const CAT_ASCII_ART: &str = indoc! {r#"
 "#};
 
 #[derive(Default)]
-pub struct Cat {
-    command_tx: Option<UnboundedSender<Action>>,
-    config: Config,
-}
+pub struct Cat;
 
 impl Cat {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 
 impl Component for Cat {
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> Result<()> {
-        self.command_tx = Some(tx);
-        Ok(())
-    }
-
-    fn register_config_handler(&mut self, config: Config) -> Result<()> {
-        self.config = config;
-        Ok(())
-    }
-
     fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Tick => {}
             Action::Render => {}
             _ => {}
         }
+
         Ok(None)
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
+        let (width, height) = CAT_DIMS;
+        if area.width < width + 2 || area.height < height {
+            return Ok(());
+        }
+
+        let corner = Rect {
+            x: area.right().saturating_sub(width + 1),
+            y: area.bottom().saturating_sub(height),
+            width,
+            height,
+        };
+
         frame.render_widget(
             Paragraph::new(CAT_ASCII_ART).style(Style::default().fg(Color::Magenta).bold()),
-            Rect { x: area.width - 17, y: area.height - 4, width: 16, height: 6 },
+            corner,
         );
 
         Ok(())
