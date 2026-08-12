@@ -1,6 +1,9 @@
 use std::io;
 use std::ops::{Deref, DerefMut};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use ratatui::backend::{Backend, CrosstermBackend, WindowSize};
 use ratatui::layout::Size;
 
@@ -8,6 +11,7 @@ use crate::ssh::TermWriter;
 
 #[derive(Debug)]
 pub struct SshBackend {
+    desync: Arc<AtomicBool>,
     inner: CrosstermBackend<TermWriter>,
     pub dims: (u16, u16),
     pub pixel: (u16, u16),
@@ -21,12 +25,21 @@ impl SshBackend {
         init_pixel_width: u16,
         init_pixel_height: u16,
     ) -> Self {
+        // Hold a shared reference to sink's redraw flag
+        let desync = writer.desync_flag();
         let inner = CrosstermBackend::new(writer);
         SshBackend {
             inner,
             dims: (init_width, init_height),
             pixel: (init_pixel_width, init_pixel_height),
+            desync,
         }
+    }
+
+    /// Whether the full frame was dropped, i.e., the client's screen no longer
+    /// matches ratatui's internal state, and requires a full redraw.
+    pub fn needs_redraw(&self) -> bool {
+        self.desync.swap(false, Ordering::Relaxed)
     }
 }
 
@@ -68,7 +81,7 @@ impl Backend for SshBackend {
     fn window_size(&mut self) -> io::Result<ratatui::backend::WindowSize> {
         Ok(WindowSize {
             columns_rows: self.size()?,
-            pixels: Size { width: self.dims.0, height: self.dims.1 },
+            pixels: Size { width: self.pixel.0, height: self.pixel.1 },
         })
     }
 

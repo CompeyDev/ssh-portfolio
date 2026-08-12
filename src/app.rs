@@ -9,7 +9,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio::task::block_in_place;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -18,7 +18,7 @@ use crate::action::Action;
 use crate::components::*;
 use crate::config::Config;
 use crate::keycode::KeyCodeExt;
-use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason};
+use crate::tui::terminal::{TerminalGeometry, TerminalInfo, TerminalKind, UnsupportedReason};
 use crate::tui::{Event, Terminal, Tui};
 use crate::CONFIG;
 
@@ -38,7 +38,7 @@ pub struct App {
     action_rx: mpsc::UnboundedReceiver<Action>,
 
     ssh_keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    ssh_resize_rx: mpsc::UnboundedReceiver<(u16, u16)>,
+    geometry_rx: watch::Receiver<TerminalGeometry>,
 
     // TODO: Refactor into its own `Components` struct
     tabs: Arc<Mutex<Tabs>>,
@@ -71,7 +71,7 @@ impl App {
         tick_rate: f64,
         frame_rate: f64,
         keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-        resize_rx: mpsc::UnboundedReceiver<(u16, u16)>,
+        geometry_rx: watch::Receiver<TerminalGeometry>,
     ) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
@@ -108,7 +108,7 @@ impl App {
             action_rx,
 
             ssh_keystroke_rx: keystroke_rx,
-            ssh_resize_rx: resize_rx,
+            geometry_rx,
 
             tabs,
             content,
@@ -237,8 +237,9 @@ impl App {
                 block_in_place(|| self.handle_key_event(key_event))?;
             }
 
-            Some((width, height)) = self.ssh_resize_rx.recv() => {
-                self.action_tx.send(Action::Resize(width, height))?;
+            Ok(()) = self.geometry_rx.changed() => {
+                let geometry = *self.geometry_rx.borrow_and_update();
+                self.action_tx.send(Action::Resize(geometry.cols, geometry.rows))?;
             }
         }
 
@@ -336,8 +337,11 @@ impl App {
     }
 
     pub fn resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
+        let geometry = *self.geometry_rx.borrow();
         let mut term = tui.terminal.try_lock()?;
+
         term.backend_mut().dims = (w, h);
+        term.backend_mut().pixel = (geometry.pixel_width, geometry.pixel_height);
         term.resize(Rect::new(0, 0, w, h))?;
         drop(term);
 
@@ -346,6 +350,13 @@ impl App {
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
         let mut term = tui.terminal.try_lock()?;
+
+        if term.backend().needs_redraw() {
+            // Frame got dropped because the client could not keep up, force a clear
+            // so ratatui has to start from scratch
+            term.clear()?;
+        }
+
         if self.needs_resize {
             term.draw(|frame| {
                 let size = frame.area();

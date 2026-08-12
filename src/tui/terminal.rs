@@ -13,6 +13,24 @@ use ratatui_image::{
 #[cfg(feature = "blog")]
 pub const DEFAULT_FONT_SIZE: FontSize = (12, 12);
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalGeometry {
+    pub cols: u16,
+    pub rows: u16,
+    pub pixel_width: u16,
+    pub pixel_height: u16,
+}
+
+impl TerminalGeometry {
+    /// Calculates the cell size in pixels. `None` when the client reported a dimension of zero.
+    pub fn font_size(&self) -> Option<(u16, u16)> {
+        match (self.cols, self.rows, self.pixel_width, self.pixel_height) {
+            (0, _, _, _) | (_, 0, _, _) | (_, _, 0, _) | (_, _, _, 0) => None, // RFC 4254 §6.2 allows zero
+            (cols, rows, width, height) => Some((width / cols, height / rows)),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct TerminalInfo {
     kind: TerminalKind,

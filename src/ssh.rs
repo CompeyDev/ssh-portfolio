@@ -1,50 +1,76 @@
 use std::io::Write;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use color_eyre::eyre::{self, eyre};
 use russh::server::{Auth, Config, Handle, Handler, Msg, Server, Session};
 use russh::{Channel, ChannelId, CryptoVec, Pty};
 use tokio::net::TcpListener;
-use tokio::runtime::Handle as TokioHandle;
-use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tracing::instrument;
 
 use crate::app::App;
 use crate::tui::backend::SshBackend;
-use crate::tui::terminal::{TerminalInfo, TerminalKind};
+#[cfg(feature = "blog")]
+use crate::tui::terminal::UnsupportedReason;
+use crate::tui::terminal::{TerminalGeometry, TerminalInfo, TerminalKind};
 use crate::tui::{Terminal, Tui};
 use crate::OPTIONS;
 
+/// Number of frames to tolerate in a queue before considering a desync between the
+/// server and the client. Redraw triggered if the threshold is exceeded.
+const FRAME_QUEUE_DEPTH: usize = 8;
+
+/// A sink implementing [`Write`] which draws frames that ratatui renders over an SSH
+/// connection.
 #[derive(Debug)]
 pub struct TermWriter {
-    inner: CryptoVec,
-
-    session: Handle,
-    channel: Channel<Msg>,
+    sink: Vec<u8>,
+    tx: mpsc::Sender<Vec<u8>>,
+    desynced: Arc<AtomicBool>,
 }
 
 impl TermWriter {
     #[instrument(skip(session, channel), level = "trace", fields(channel_id = %channel.id()))]
     fn new(session: Handle, channel: Channel<Msg>) -> Self {
         tracing::trace!("Acquiring new SSH writer");
-        Self { session, channel, inner: CryptoVec::new() }
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(FRAME_QUEUE_DEPTH);
+        let channel_id = channel.id();
+
+        // NOTE: We spawn two separate tasks to drain the request and response channels.
+        //
+        // `Handle::data` sends on a *bounded* channel, so awaiting it from the `flush`
+        // parks the render thread whenever the client has a desync because it is called
+        // from inside the draw loop, which holds a lock on the TUI, which causes a full
+        // deadlock. We fixed this by moving the await into these drain tasks instead of
+        // within the main draw loop
+
+        let mut incoming = channel;
+        tokio::spawn(async move {
+            // recv - Drain all the message requests from the queue. Unless read, the
+            // internal buffer fills up (max size = 100 by default) and the session
+            // fully deadlocks. Discovered when bursts of quick resizes caused the
+            // server to become fully unresponsive
+            while incoming.wait().await.is_some() {}
+            tracing::debug!("SSH channel closed, stopping request drain");
+        });
+
+        tokio::spawn(async move {
+            // send - Drain all data to be sent and zap it to the client
+            while let Some(data) = rx.recv().await {
+                if session.data(channel_id, CryptoVec::from(data)).await.is_err() {
+                    tracing::debug!("SSH channel closed, stopping writer drain");
+                    break;
+                }
+            }
+        });
+
+        Self { sink: Vec::new(), tx, desynced: Arc::new(AtomicBool::new(false)) }
     }
 
-    #[optimize(speed)]
-    fn flush_inner(&mut self) -> std::io::Result<()> {
-        let handle = TokioHandle::current();
-        handle.block_on(async move {
-            self.session
-                .data(self.channel.id(), self.inner.clone())
-                .await
-                .map_err(|err| {
-                    std::io::Error::other(String::from_iter(
-                        err.iter().map(|item| *item as char),
-                    ))
-                })
-                .map(|_| self.inner.clear())
-        })
+    pub fn desync_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.desynced)
     }
 }
 
@@ -53,7 +79,7 @@ impl Write for TermWriter {
     #[optimize(speed)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
-        self.inner.extend(buf);
+        self.sink.extend_from_slice(buf);
         Ok(buf.len())
     }
 
@@ -61,26 +87,37 @@ impl Write for TermWriter {
     #[optimize(speed)]
     fn flush(&mut self) -> std::io::Result<()> {
         tracing::trace!("Flushing SSH terminal writer buffer");
-        tokio::task::block_in_place(|| self.flush_inner())
+        if self.sink.is_empty() {
+            return Ok(());
+        }
+
+        match self.tx.try_send(std::mem::take(&mut self.sink)) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // Client and the internal ratatui state have a mismatch. Trigger a
+                // full clear and redraw for the next frame
+                self.desynced.store(true, Ordering::Relaxed);
+                Ok(())
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(std::io::Error::other("SSH channel closed"))
+            }
+        }
     }
 }
 
-#[allow(clippy::type_complexity)]
 pub struct SshSession {
     terminal_info: Arc<RwLock<TerminalInfo>>,
     app: Option<Arc<Mutex<App>>>,
     keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
-    resize_tx: mpsc::UnboundedSender<(u16, u16)>,
-    init_dims_tx: Option<oneshot::Sender<((u16, u16), (u16, u16))>>,
-    init_dims_rx: Option<oneshot::Receiver<((u16, u16), (u16, u16))>>,
+    geometry_tx: watch::Sender<TerminalGeometry>,
     tui: Arc<RwLock<Option<Tui>>>,
 }
 
 impl SshSession {
     pub fn new() -> Self {
         let (keystroke_tx, keystroke_rx) = mpsc::unbounded_channel();
-        let (resize_tx, resize_rx) = mpsc::unbounded_channel();
-        let (init_dims_tx, init_dims_rx) = oneshot::channel();
+        let (geometry_tx, geometry_rx) = watch::channel(TerminalGeometry::default());
 
         let term_info = Arc::new(RwLock::new(TerminalInfo::default()));
 
@@ -91,17 +128,30 @@ impl SshSession {
                 OPTIONS.tick_rate,
                 OPTIONS.frame_rate,
                 keystroke_rx,
-                resize_rx,
+                geometry_rx,
             )
             .inspect_err(|err| tracing::error!("Failed to create app: {err}"))
             .ok()
             .map(|app| Arc::new(Mutex::new(app))),
             tui: Arc::new(RwLock::new(None)),
             keystroke_tx,
-            resize_tx,
-            init_dims_tx: Some(init_dims_tx),
-            init_dims_rx: Some(init_dims_rx), // Only an option so that I can take ownership of it
+            geometry_tx,
         }
+    }
+
+    /// Records the client's window size and notifies the app
+    async fn set_geometry(&self, geometry: TerminalGeometry) {
+        #[cfg(feature = "blog")]
+        match geometry.font_size() {
+            Some(font_size) => self.terminal_info.write().await.set_font_size(font_size),
+            None => self
+                .terminal_info
+                .write()
+                .await
+                .set_kind(TerminalKind::Unsupported(UnsupportedReason::Unsized)),
+        }
+
+        let _ = self.geometry_tx.send(geometry);
     }
 
     async fn run_app(
@@ -140,20 +190,22 @@ impl Handler for SshSession {
 
             let inner_app = Arc::clone(app);
             let tui = Arc::clone(&self.tui);
-            let rx = self.init_dims_rx.take().unwrap();
+            let mut geometry_rx = self.geometry_tx.subscribe();
 
             tracing::info!("Serving app to open session");
             tokio::task::spawn(async move {
                 let result =
                     async || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-                        let ((term_width, term_height), (pixel_width, pixel_height)) =
-                            rx.await?;
+                        // Wait for an initial size notification
+                        geometry_rx.changed().await?;
+                        let geometry = *geometry_rx.borrow_and_update();
+
                         let writer = Arc::new(Mutex::new(Terminal::new(SshBackend::new(
                             TermWriter::new(session_handle.clone(), channel),
-                            term_width,
-                            term_height,
-                            pixel_width,
-                            pixel_height,
+                            geometry.cols,
+                            geometry.rows,
+                            geometry.pixel_width,
+                            geometry.pixel_height,
                         ))?));
 
                         Self::run_app(inner_app, writer, tui, &session_handle, channel_id)
@@ -216,33 +268,19 @@ impl Handler for SshSession {
         tracing::info!("PTY requested by terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
-        #[cfg(feature = "blog")]
-        if pix_width != 0 && pix_height != 0 {
-            self.terminal_info.write().await.set_font_size((
-                (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
-                (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,
-            ));
-        } else {
-            self.terminal_info.write().await.set_kind(TerminalKind::Unsupported(
-                crate::tui::terminal::UnsupportedReason::Unsized,
-            ));
-        }
-
         if !term.contains("xterm") {
             session.channel_failure(channel_id)?;
             return Err(eyre!("Unsupported terminal type: {term}"));
         }
 
-        let tx = self.init_dims_tx.take().unwrap();
-        if !tx.is_closed() {
-            // If we've not already initialized the terminal, send the initial dimensions
-            tracing::debug!("Sending initial pty dimensions");
-            tx.send((
-                (col_width as u16, row_height as u16),
-                (pix_width as u16, pix_height as u16),
-            ))
-            .map_err(|_| eyre!("Failed to send initial pty dimensions"))?;
-        }
+        tracing::debug!("Publishing initial pty geometry");
+        self.set_geometry(TerminalGeometry {
+            cols: col_width as u16,
+            rows: row_height as u16,
+            pixel_width: pix_width as u16,
+            pixel_height: pix_height as u16,
+        })
+        .await;
 
         session.channel_success(channel_id)?;
         Ok(())
@@ -274,15 +312,13 @@ impl Handler for SshSession {
         tracing::info!("Terminal window resized by client, notifying components");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
-        #[cfg(feature = "blog")]
-        self.terminal_info.write().await.set_font_size((
-            (pix_width / col_width).try_into().or(Err(eyre!("Terminal too wide")))?,
-            (pix_height / row_height).try_into().or(Err(eyre!("Terminal too tall")))?,
-        ));
-
-        self.resize_tx
-            .send((col_width as u16, row_height as u16))
-            .map_err(|_| eyre!("Failed to send pty size specifications"))?;
+        self.set_geometry(TerminalGeometry {
+            cols: col_width as u16,
+            rows: row_height as u16,
+            pixel_width: pix_width as u16,
+            pixel_height: pix_height as u16,
+        })
+        .await;
 
         Ok(())
     }
