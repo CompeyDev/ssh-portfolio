@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use color_eyre::eyre::{self, eyre};
@@ -29,6 +29,7 @@ pub struct TermWriter {
     sink: Vec<u8>,
     tx: mpsc::Sender<Vec<u8>>,
     desynced: Arc<AtomicBool>,
+    queued: Arc<AtomicUsize>,
 }
 
 impl TermWriter {
@@ -37,6 +38,8 @@ impl TermWriter {
         tracing::trace!("Acquiring new SSH writer");
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(FRAME_QUEUE_DEPTH);
         let channel_id = channel.id();
+        let queued = Arc::new(AtomicUsize::new(0));
+        let drain_queued = Arc::clone(&queued);
 
         // NOTE: We spawn two separate tasks to drain the request and response channels.
         //
@@ -59,18 +62,24 @@ impl TermWriter {
         tokio::spawn(async move {
             // send - Drain all data to be sent and zap it to the client
             while let Some(data) = rx.recv().await {
-                if session.data(channel_id, CryptoVec::from(data)).await.is_err() {
+                let sent = session.data(channel_id, CryptoVec::from(data)).await;
+                drain_queued.fetch_sub(1, Ordering::Release);
+                if sent.is_err() {
                     tracing::debug!("SSH channel closed, stopping writer drain");
                     break;
                 }
             }
         });
 
-        Self { sink: Vec::new(), tx, desynced: Arc::new(AtomicBool::new(false)) }
+        Self { sink: Vec::new(), tx, desynced: Arc::new(AtomicBool::new(false)), queued }
     }
 
     pub fn desync_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.desynced)
+    }
+
+    pub fn queued_frames(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.queued)
     }
 }
 
@@ -92,7 +101,10 @@ impl Write for TermWriter {
         }
 
         match self.tx.try_send(std::mem::take(&mut self.sink)) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.queued.fetch_add(1, Ordering::Acquire);
+                Ok(())
+            }
             Err(mpsc::error::TrySendError::Full(_)) => {
                 // Client and the internal ratatui state have a mismatch. Trigger a
                 // full clear and redraw for the next frame

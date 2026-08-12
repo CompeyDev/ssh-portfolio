@@ -1,17 +1,20 @@
 use std::io;
 use std::ops::{Deref, DerefMut};
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use ratatui::backend::{Backend, CrosstermBackend, WindowSize};
 use ratatui::layout::Size;
+
+use std::time::{Duration, Instant};
 
 use crate::ssh::TermWriter;
 
 #[derive(Debug)]
 pub struct SshBackend {
     desync: Arc<AtomicBool>,
+    queued: Arc<AtomicUsize>,
     inner: CrosstermBackend<TermWriter>,
     pub dims: (u16, u16),
     pub pixel: (u16, u16),
@@ -27,12 +30,14 @@ impl SshBackend {
     ) -> Self {
         // Hold a shared reference to sink's redraw flag
         let desync = writer.desync_flag();
+        let queued = writer.queued_frames();
         let inner = CrosstermBackend::new(writer);
         SshBackend {
             inner,
             dims: (init_width, init_height),
             pixel: (init_pixel_width, init_pixel_height),
             desync,
+            queued,
         }
     }
 
@@ -40,6 +45,17 @@ impl SshBackend {
     /// matches ratatui's internal state, and requires a full redraw.
     pub fn needs_redraw(&self) -> bool {
         self.desync.swap(false, Ordering::Relaxed)
+    }
+
+    /// Wait for at most 500ms for queued frames to be flushed from the underlying
+    /// sink.
+    pub async fn flushed(&self) {
+        const FLUSH_GRACE: Duration = Duration::from_millis(500);
+        let deadline = Instant::now() + FLUSH_GRACE;
+
+        while self.queued.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
     }
 }
 

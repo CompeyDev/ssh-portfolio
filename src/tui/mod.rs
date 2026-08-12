@@ -203,6 +203,9 @@ impl Tui {
         }
 
         crossterm::execute!(term.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+
+        // Wait for the clear sequences to be truly flushed before disconnecting
+        term.backend().flushed().await;
         Ok(())
     }
 
