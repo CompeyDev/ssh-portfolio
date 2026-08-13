@@ -1,6 +1,5 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::time::Duration;
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -18,7 +17,7 @@ use crate::action::Action;
 use crate::components::*;
 use crate::config::Config;
 use crate::keycode::KeyCodeExt;
-use crate::tui::terminal::{TerminalGeometry, TerminalInfo, TerminalKind, UnsupportedReason};
+use crate::tui::terminal::{TerminalGeometry, TerminalInfo};
 use crate::tui::{Event, Terminal, Tui};
 use crate::CONFIG;
 
@@ -154,16 +153,6 @@ impl App {
             #[cfg(feature = "blog")]
             self.blog_posts.try_lock()?.register_config_handler(self.config.clone())?;
             self.help.try_lock()?.register_config_handler(self.config.clone())?;
-
-            for _ in 1..5 {
-                if matches!(
-                    self.terminal_info.blocking_read().kind(),
-                    TerminalKind::Unsupported(UnsupportedReason::Unprobed)
-                ) {
-                    tracing::debug!("Waiting for for terminal info to be probed");
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-            }
 
             // Initialize components
             let size = tui.terminal.try_lock()?.size()?;

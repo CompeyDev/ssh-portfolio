@@ -2,6 +2,7 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use color_eyre::eyre::{self, eyre};
 use russh::server::{Auth, Config, Handle, Handler, Msg, Server, Session};
@@ -12,15 +13,16 @@ use tracing::instrument;
 
 use crate::app::App;
 use crate::tui::backend::SshBackend;
-#[cfg(feature = "blog")]
-use crate::tui::terminal::UnsupportedReason;
-use crate::tui::terminal::{TerminalGeometry, TerminalInfo, TerminalKind};
+use crate::tui::probe::Probe;
+use crate::tui::terminal::{TerminalGeometry, TerminalInfo};
 use crate::tui::{Terminal, Tui};
 use crate::OPTIONS;
 
 /// Number of frames to tolerate in a queue before considering a desync between the
 /// server and the client. Redraw triggered if the threshold is exceeded.
 const FRAME_QUEUE_DEPTH: usize = 8;
+
+const PROBE_TIMEOUT: Duration = Duration::from_millis(1000);
 
 /// A sink implementing [`Write`] which draws frames that ratatui renders over an SSH
 /// connection.
@@ -124,6 +126,7 @@ pub struct SshSession {
     keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
     geometry_tx: watch::Sender<TerminalGeometry>,
     tui: Arc<RwLock<Option<Tui>>>,
+    probe: Arc<Mutex<Option<Probe>>>,
 }
 
 impl SshSession {
@@ -148,19 +151,92 @@ impl SshSession {
             tui: Arc::new(RwLock::new(None)),
             keystroke_tx,
             geometry_tx,
+            probe: Arc::new(Mutex::new(None)),
         }
     }
 
-    /// Records the client's window size and notifies the app
+    /// Finalizes the probe, writes its results into the session's state and replays any user
+    /// input keystrokes that were captured in the probing process.
+    async fn finish_probe(
+        probe: &Arc<Mutex<Option<Probe>>>,
+        terminal_info: &Arc<RwLock<TerminalInfo>>,
+        keystroke_tx: &mpsc::UnboundedSender<Vec<u8>>,
+    ) {
+        let Some(probe) = probe.lock().await.take() else {
+            return;
+        };
+
+        let outcome = probe.finish();
+        tracing::info!(
+            "Capability probe concluded: {:?}, cell size {:?}, name {:?}",
+            outcome.caps,
+            outcome.cell_size,
+            outcome.name,
+        );
+
+        // Set the probe's outcomes
+        {
+            let mut info = terminal_info.write().await;
+            info.set_probed(outcome.caps);
+
+            #[cfg(feature = "blog")]
+            if let Some(size) = outcome.cell_size {
+                info.set_font_size(size);
+            }
+
+            if let Some(name) = outcome.name {
+                info.set_reported_name(name);
+            }
+        }
+
+        // Forward any user inputs from during the probe period
+        if !outcome.pending_input.is_empty() {
+            tracing::debug!(
+                "Replaying {} byte(s) typed during the probe",
+                outcome.pending_input.len()
+            );
+            let _ = keystroke_tx.send(outcome.pending_input);
+        }
+    }
+
+    /// Start the probe by writing its payload to the client and set its timeout.
+    /// 
+    /// NOTE: This method immediately returns after the payload has reached the 
+    /// client, and does not wait for the actual probing to finish.
+    async fn start_probe(&mut self, channel_id: ChannelId, session: &mut Session) {
+        if self.probe.lock().await.is_some() {
+            tracing::debug!("Capability probe already in progress, not restarting");
+            return;
+        }
+
+        *self.probe.lock().await = Some(Probe::new());
+
+        let handle = session.handle();
+        if handle.data(channel_id, CryptoVec::from(Probe::query())).await.is_err() {
+            tracing::debug!("Channel closed before the capability probe could be written");
+            let _ = self.probe.lock().await.take();
+            return;
+        }
+
+        tracing::debug!("Capability probe written, waiting up to {PROBE_TIMEOUT:?}");
+
+        let probe = Arc::clone(&self.probe);
+        let terminal_info = Arc::clone(&self.terminal_info);
+        let keystroke_tx = self.keystroke_tx.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(PROBE_TIMEOUT).await;
+            if probe.lock().await.is_some() {
+                tracing::info!("Capability probe timed out, falling back");
+            }
+
+            Self::finish_probe(&probe, &terminal_info, &keystroke_tx).await;
+        });
+    }
+
     async fn set_geometry(&self, geometry: TerminalGeometry) {
         #[cfg(feature = "blog")]
-        match geometry.font_size() {
-            Some(font_size) => self.terminal_info.write().await.set_font_size(font_size),
-            None => self
-                .terminal_info
-                .write()
-                .await
-                .set_kind(TerminalKind::Unsupported(UnsupportedReason::Unsized)),
+        if let Some(font_size) = geometry.font_size() {
+            self.terminal_info.write().await.set_font_size(font_size);
         }
 
         let _ = self.geometry_tx.send(geometry);
@@ -240,31 +316,6 @@ impl Handler for SshSession {
         Err(eyre!("Failed to initialize App for session"))
     }
 
-    #[instrument(skip(self, _session), fields(channel_id = %_channel_id))]
-    async fn env_request(
-        &mut self,
-        _channel_id: ChannelId,
-        variable_name: &str,
-        variable_value: &str,
-        _session: &mut Session,
-    ) -> Result<(), Self::Error> {
-        // FIXME: currently, terminals which don't set `$TERM_PROGRAM` just get stuck in the
-        // polling loop forever where we wait for the type to be probed, a workaround is to force
-        // set the variable to an empty string or something invalid:
-        //
-        // `TERM_PROGRAM="" ssh -o SendEnv=TERM_PROGRAM devcomp.xyz`
-        if variable_name == "TERM_PROGRAM" {
-            self.terminal_info
-                .write()
-                .await
-                .set_kind(TerminalKind::from_term_program(variable_value));
-
-            tracing::info!("Terminal program found: {:?}", self.terminal_info);
-        }
-
-        Ok(())
-    }
-
     #[instrument(skip_all, fields(channel_id = %channel_id))]
     async fn pty_request(
         &mut self,
@@ -280,10 +331,8 @@ impl Handler for SshSession {
         tracing::info!("PTY requested by terminal: {term}");
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
-        if !term.contains("xterm") {
-            session.channel_failure(channel_id)?;
-            return Err(eyre!("Unsupported terminal type: {term}"));
-        }
+        // Start probing client terminal for its capabilities
+        self.start_probe(channel_id, session).await;
 
         tracing::debug!("Publishing initial pty geometry");
         self.set_geometry(TerminalGeometry {
@@ -305,6 +354,32 @@ impl Handler for SshSession {
         data: &[u8],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        // If the probe is open, have it gobble all incoming data until we get the info
+        // that we need. After it finishes, have it forward the user inputs as required
+        {
+            let mut guard = self.probe.lock().await;
+            if let Some(probe) = guard.as_mut() {
+                probe.feed(data);
+                let typed = probe.take_input();
+                let fenced = probe.is_fenced();
+                drop(guard);
+
+                if !typed.is_empty() {
+                    tracing::debug!("Keystroke during probe window: {typed:?}, sending");
+                    self.keystroke_tx
+                        .send(typed)
+                        .map_err(|_| eyre!("Failed to send event keystroke data"))?;
+                }
+
+                if fenced {
+                    Self::finish_probe(&self.probe, &self.terminal_info, &self.keystroke_tx)
+                        .await;
+                }
+
+                return Ok(());
+            }
+        }
+
         tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
         self.keystroke_tx
             .send(data.to_vec())

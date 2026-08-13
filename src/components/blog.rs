@@ -1,4 +1,5 @@
 use std::io::{BufReader, Cursor};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use color_eyre::eyre::eyre;
@@ -7,8 +8,12 @@ use image::{ImageReader, Rgba};
 use ratatui::layout::{Constraint, Flex, Layout, Rect, Size};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use ratatui_image::picker::{Picker, ProtocolType};
-use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::picker::ProtocolType;
+use ratatui_image::protocol::halfblocks::Halfblocks;
+use ratatui_image::protocol::iterm2::Iterm2;
+use ratatui_image::protocol::kitty::StatefulKitty;
+use ratatui_image::protocol::sixel::Sixel;
+use ratatui_image::protocol::{ImageSource, StatefulProtocol, StatefulProtocolType};
 use ratatui_image::{Resize, StatefulImage};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
@@ -17,14 +22,21 @@ use crate::action::Action;
 use crate::com;
 use crate::com::whtwnd::blog::defs::Ogp;
 use crate::components::{Component, SelectionList};
-use crate::tui::terminal::{TerminalInfo, TerminalKind, UnsupportedReason, DEFAULT_FONT_SIZE};
+use crate::tui::terminal::TerminalInfo;
 
 pub type Post = Arc<com::whtwnd::blog::entry::Record>;
+
+/// Kitty images are tagged by IDs and must be unique for a terminal session
+///
+/// The ID is incremented, as opposed to ratatui-image's internal RNG based
+/// system, since this is cheaper and truly has no likelihood of collision
+static NEXT_IMAGE_ID: AtomicU32 = AtomicU32::new(1);
+
 pub struct BlogPosts {
     list: SelectionList<Post>,
     posts: Vec<Post>,
-    image_renderer: Option<Picker>,
     in_post: (Option<StatefulProtocol>, Option<usize>),
+    terminal_info: Option<Arc<RwLock<TerminalInfo>>>,
 }
 
 impl BlogPosts {
@@ -32,17 +44,9 @@ impl BlogPosts {
         let posts_ref = posts.to_vec();
         Self {
             list: SelectionList::new(posts),
-            image_renderer: Some(Picker {
-                font_size: DEFAULT_FONT_SIZE,
-                protocol_type: ProtocolType::Halfblocks,
-                background_color: Rgba([0, 0, 0, 0]),
-                // NOTE: Multiplexers such as tmux are currently unsupported, we ensure that we have an
-                // xterm based terminal emulator in ssh.rs, if not, we reject the conection to begin with
-                is_tmux: false,
-                capabilities: vec![],
-            }),
             posts: posts_ref,
             in_post: (None, None),
+            terminal_info: None,
         }
     }
 
@@ -50,49 +54,77 @@ impl BlogPosts {
         self.in_post.1.is_some()
     }
 
-    async fn header_image(&self, img: Ogp) -> Result<StatefulProtocol> {
-        if let Some(picker) = &self.image_renderer {
-            let img_blob = reqwest::get(img.url.clone())
-                .await?
-                .bytes()
-                .await?
-                .iter()
-                .cloned()
-                .collect::<Vec<u8>>();
+    fn images_available(&self) -> bool {
+        self.terminal_info
+            .as_ref()
+            .and_then(|info| info.try_read().ok())
+            .is_some_and(|info| info.supports_images())
+    }
 
-            let dyn_img = ImageReader::new(BufReader::new(Cursor::new(img_blob)))
-                .with_guessed_format()?
-                .decode()?;
-            let sized_img = picker.new_resize_protocol(dyn_img);
+    fn draw_url_fallback(frame: &mut Frame, area: Rect, ogp: &Ogp, body: Paragraph<'_>) {
+        let img_url = super::truncate(&ogp.url, area.width as usize / 3);
+        let url_widget = Line::from(img_url).centered().style(
+            Style::default().add_modifier(Modifier::BOLD | Modifier::ITALIC).fg(Color::Yellow),
+        );
 
-            return Ok(sized_img);
+        frame.render_widget(
+            url_widget,
+            Rect::new(area.x + 1, area.y + 1, area.width, area.height),
+        );
+
+        frame.render_widget(body, Rect::new(area.x + 3, area.y + 3, area.width, area.height));
+    }
+
+    fn stateful_image_type(protocol: ProtocolType) -> StatefulProtocolType {
+        match protocol {
+            ProtocolType::Halfblocks => {
+                StatefulProtocolType::Halfblocks(Halfblocks::default())
+            }
+            ProtocolType::Sixel => StatefulProtocolType::Sixel(Sixel::default()),
+            ProtocolType::Iterm2 => StatefulProtocolType::ITerm2(Iterm2::default()),
+            ProtocolType::Kitty => StatefulProtocolType::Kitty(StatefulKitty::new(
+                NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+                false,
+            )),
         }
+    }
 
-        Err(eyre!("No image supported renderer initialized"))
+    async fn header_image(&mut self, img: Ogp) -> Result<StatefulProtocol> {
+        // The probe is shared and asynchronous, read its state at the present moment
+        let Some(shared) = self.terminal_info.clone() else {
+            return Err(eyre!("No terminal info available to render an image against"));
+        };
+
+        let (protocol, font_size) = {
+            let info = shared.read().await;
+            (info.protocol(), info.font_size())
+        };
+
+        let img_blob = reqwest::get(img.url.clone())
+            .await?
+            .bytes()
+            .await?
+            .iter()
+            .cloned()
+            .collect::<Vec<u8>>();
+
+        let dyn_img = ImageReader::new(BufReader::new(Cursor::new(img_blob)))
+            .with_guessed_format()?
+            .decode()?;
+
+        // A fully transparent background skips the constructor's underlay, which would
+        // otherwise allocate a second full-size image and composite onto it
+        let source = ImageSource::new(dyn_img, font_size, Rgba([0, 0, 0, 0]));
+
+        Ok(StatefulProtocol::new(source, font_size, Self::stateful_image_type(protocol)))
     }
 }
 
 impl Component for BlogPosts {
     fn init(&mut self, term_info: Arc<RwLock<TerminalInfo>>, _: Size) -> Result<()> {
-        let locked_info = term_info.blocking_read().clone();
-
-        if matches!(locked_info.kind(), TerminalKind::Unsupported(UnsupportedReason::Unsized))
-        {
-            self.image_renderer = None;
-        }
-
-        if let Some(picker) = &mut self.image_renderer {
-            picker.capabilities = locked_info.kind().capabilities();
-            picker.protocol_type = locked_info.kind().as_protocol();
-            picker.font_size = locked_info.font_size();
-
-            tracing::info!(
-                "Using {:?} rendering protocol for blog image renderer, font size: {:?}",
-                picker.protocol_type(),
-                picker.font_size(),
-            );
-        }
-
+        // Holding a shared reference to the handle since the probing is asynchronous and
+        // the state at this point of initialization might not be the actual value yet
+        self.terminal_info = Some(term_info);
         Ok(())
     }
 
@@ -135,12 +167,10 @@ impl Component for BlogPosts {
                 format!("# {}\n\n{}", title, post.content)
             });
 
+            let post_ogp = post.ogp.clone();
             let post_body_widget =
                 Paragraph::new(tui_markdown::from_str(&post_body)).wrap(Wrap { trim: true });
 
-            // FIXME: content in the body often overlaps with the `Cat` component and gets
-            // formatted weirdly. maybe deal with that at some point? real solution is probably a
-            // refactor to use `Layout`s instead of rolling our own layout logic
             if let Some(img) = self.in_post.0.as_mut() {
                 // Render prefetched image on current draw call
                 let [image_area, text_area] =
@@ -156,13 +186,18 @@ impl Component for BlogPosts {
 
                 frame.render_stateful_widget(StatefulImage::default(), image_area, img);
                 frame.render_widget(post_body_widget, text_area);
-            } else if self.image_renderer.is_some() {
+            } else if self.images_available() {
                 // Image not cached, load image and skip rendering for current draw call
-                if let Some(ref post_ogp) = post.ogp {
+                if let Some(post_ogp) = post_ogp.clone() {
                     let rt = tokio::runtime::Handle::current();
-                    let img =
-                        rt.block_on(async { self.header_image(post_ogp.clone()).await })?;
-                    self.in_post.0 = Some(img);
+                    match rt.block_on(async { self.header_image(post_ogp.clone()).await }) {
+                        Ok(img) => self.in_post.0 = Some(img),
+                        Err(err) => {
+                            // Image fetch failed
+                            tracing::warn!("Header image unavailable, showing url: {err}");
+                            Self::draw_url_fallback(frame, area, &post_ogp, post_body_widget);
+                        }
+                    }
                 } else {
                     frame.render_widget(
                         post_body_widget,
@@ -170,23 +205,8 @@ impl Component for BlogPosts {
                     );
                 }
             } else if let Some(ref post_ogp) = post.ogp {
-                // No image rendering capabilities, only display text
-                let img_url = super::truncate(&post_ogp.url, area.width as usize / 3);
-                let url_widget = Line::from(img_url).centered().style(
-                    Style::default()
-                        .add_modifier(Modifier::BOLD | Modifier::ITALIC)
-                        .fg(Color::Yellow),
-                );
-
-                frame.render_widget(
-                    url_widget,
-                    Rect::new(area.x + 1, area.y + 1, area.width, area.height),
-                );
-
-                frame.render_widget(
-                    post_body_widget,
-                    Rect::new(area.x + 3, area.y + 3, area.width, area.height),
-                );
+                // No image support at all
+                Self::draw_url_fallback(frame, area, post_ogp, post_body_widget);
             }
         } else {
             self.list.draw(frame, area)?;

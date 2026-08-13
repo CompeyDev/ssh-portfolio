@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::error;
 
 pub(crate) mod backend;
+pub(crate) mod probe;
 pub(crate) mod status;
 pub(crate) mod terminal;
 

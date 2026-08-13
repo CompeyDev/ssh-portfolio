@@ -1,17 +1,14 @@
 use std::default::Default;
 
-use default_variant::default;
-use serde::{Deserialize, Serialize};
-use strum::Display;
-
 #[cfg(feature = "blog")]
-use ratatui_image::{
-    picker::{Capability, ProtocolType},
-    FontSize,
-};
+use ratatui_image::{picker::ProtocolType, FontSize};
 
+/// Cell size in pixels. Fallback for when a probe fails.
+///
+/// NOTE: Not square because most terminals have a size ratio of roughly 1:2 (tested
+/// against ghostty, kitty and konsole).
 #[cfg(feature = "blog")]
-pub const DEFAULT_FONT_SIZE: FontSize = (12, 12);
+pub const DEFAULT_FONT_SIZE: FontSize = (10, 20);
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalGeometry {
@@ -31,30 +28,104 @@ impl TerminalGeometry {
     }
 }
 
+/// Graphics capabilities reported by the client
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ProbedCapabilities {
+    /// Supports image rendering using the kitty graphics protocol
+    pub kitty: bool,
+    /// Supports image rendering using the six pixel bitmap format
+    pub sixel: bool,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct TerminalInfo {
-    kind: TerminalKind,
     #[cfg(feature = "blog")]
     font_size: Option<FontSize>,
+    /// `Some` once the probe has finished, whether or not the client answered
+    probed: Option<ProbedCapabilities>,
+    /// The client's terminal name and version, if reported
+    reported_name: Option<String>,
 }
 
 impl TerminalInfo {
-    /// Get the terminal kind.
-    pub fn kind(&self) -> &TerminalKind {
-        &self.kind
-    }
-
-    /// Get the font size.
+    /// Get the font size, falling back to [`DEFAULT_FONT_SIZE`] if unreported by
+    /// the client.
+    ///
+    /// See [`TerminalInfo::has_font_size`] to know whether the client reported its
+    /// own cell size.
     #[cfg(feature = "blog")]
     pub fn font_size(&self) -> FontSize {
         self.font_size.unwrap_or(DEFAULT_FONT_SIZE)
     }
 
-    /// Sets the terminal kind, if currently unset (i.e., unprobed).
-    pub fn set_kind(&mut self, kind: TerminalKind) {
-        if matches!(self.kind, TerminalKind::Unsupported(UnsupportedReason::Unprobed)) {
-            self.kind = kind;
+    /// Whether the client reported a real cell size.
+    #[cfg(feature = "blog")]
+    pub fn has_font_size(&self) -> bool {
+        self.font_size.is_some()
+    }
+
+    /// Whether images can be rendered for this client.
+    #[cfg(feature = "blog")]
+    pub fn supports_images(&self) -> bool {
+        match self.protocol() {
+            ProtocolType::Halfblocks => true,
+            _ => self.has_font_size(),
         }
+    }
+
+    /// Whether we are connected over a multipler session (currently only detects tmux).
+    #[cfg(feature = "blog")]
+    pub fn is_multiplexer(&self) -> bool {
+        // TODO: screen, zellij, etc.
+        self.leading_token().is_some_and(|token| token.eq_ignore_ascii_case("tmux"))
+    }
+
+    /// Splits and returns the "leading token", which is usually the name.
+    ///
+    /// The format is not guaranteed, and hence a space or left parenthesis separate is
+    /// attempted for the split.
+    pub fn leading_token(&self) -> Option<&str> {
+        self.reported_name.as_deref()?.split(['(', ' ']).next()
+    }
+
+    /// The graphics protocol to use for this client.
+    #[cfg(feature = "blog")]
+    pub fn protocol(&self) -> ProtocolType {
+        if self.is_multiplexer() {
+            // tmux returns information about whether it can handle an image type,
+            // and not whether the underlying terminal can. We default to halfblocks
+            // conservatively
+            return ProtocolType::Halfblocks;
+        }
+
+        match self.probed {
+            Some(caps) if caps.kitty => ProtocolType::Kitty,
+            Some(caps) if caps.sixel => ProtocolType::Sixel,
+            Some(_) => ProtocolType::Halfblocks, // probed, no support
+            None => ProtocolType::Halfblocks,    // unprobed
+        }
+    }
+
+    /// The probe outcome, or `None` if the probe hasn't finalized.
+    pub fn probed(&self) -> Option<ProbedCapabilities> {
+        self.probed
+    }
+
+    /// The full `XTVERSION` response, including the terminal's name and version,
+    /// if any.
+    pub fn reported_name(&self) -> Option<&str> {
+        self.reported_name.as_deref()
+    }
+
+    /// Records the terminal's self-reported name, as returned by an `XTVERSION`
+    /// query.
+    pub fn set_reported_name(&mut self, name: String) {
+        self.reported_name = Some(name);
+    }
+
+    /// Records the probe outcome.
+    pub fn set_probed(&mut self, caps: ProbedCapabilities) {
+        self.probed = Some(caps);
     }
 
     /// Sets the font size.
@@ -64,118 +135,90 @@ impl TerminalInfo {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Display, Clone /*, Copy */)]
-#[default(Unsupported(UnsupportedReason::default()))]
-#[strum(serialize_all = "lowercase")]
-pub enum TerminalKind {
-    Ghostty,
-    Hyper,
-    ITerm2,
-    Kitty,
-    MinTty,
-    Rio,
-    Tabby,
-    Vscode,
-    Wezterm,
-    Unsupported(UnsupportedReason),
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone, Copy)]
-pub enum UnsupportedReason {
-    /// Terminal emulator does not provide real pixel size, making it impossible to calculate
-    /// font size.
-    ///
-    /// Currently known terminal emulators which exhibit this behavior:
-    ///
-    /// - VSCode
-    Unsized,
-
-    /// Terminal emulator is not known.
-    Unknown,
-
-    /// Terminal emulator has not been detected yet. This is only set during SSH initialization.
-    #[default]
-    Unprobed,
-}
-
-impl TerminalKind {
-    pub const ALL_SUPPORTED: [Self; 9] = [
-        Self::Ghostty,
-        Self::Hyper,
-        Self::ITerm2,
-        Self::Kitty,
-        Self::MinTty,
-        Self::Rio,
-        Self::Tabby,
-        Self::Vscode,
-        Self::Wezterm,
-    ];
-
-    pub fn from_term_program(program: &str) -> Self {
-        let terminals = [
-            ("ghostty", Self::Ghostty),
-            ("iTerm.app", Self::ITerm2),
-            ("iTerm2", Self::ITerm2),
-            ("WezTerm", Self::Wezterm),
-            ("mintty", Self::MinTty),
-            ("vscode", Self::Vscode),
-            ("Tabby", Self::Tabby),
-            ("Hyper", Self::Hyper),
-            ("rio", Self::Rio),
-        ];
-
-        for (term, variant) in terminals {
-            if program.contains(term) {
-                return variant;
-            }
-        }
-
-        Self::Unsupported(UnsupportedReason::Unknown)
+    fn named(name: &str) -> TerminalInfo {
+        let mut info = TerminalInfo::default();
+        info.set_reported_name(name.to_string());
+        info
     }
 
-    pub fn supported() -> String {
-        Self::ALL_SUPPORTED.map(|term| term.to_string()).join(", ")
+    #[test]
+    fn the_leading_token_drops_the_version_whichever_separator_is_used() {
+        assert_eq!(named("kitty(0.48.2)").leading_token(), Some("kitty"));
+        assert_eq!(named("ghostty 1.3.1-arch2").leading_token(), Some("ghostty"));
+        assert_eq!(named("Konsole 26.04.3").leading_token(), Some("Konsole"));
+        assert_eq!(named("tmux 3.7b").leading_token(), Some("tmux"));
+        assert_eq!(TerminalInfo::default().leading_token(), None);
     }
 
     #[cfg(feature = "blog")]
-    pub fn capabilities(&self) -> Vec<Capability> {
-        match *self {
-            Self::Hyper | Self::Vscode => vec![Capability::RectangularOps],
-            Self::Ghostty => vec![Capability::Kitty, Capability::RectangularOps],
-            Self::Tabby | Self::MinTty => vec![Capability::Sixel, Capability::RectangularOps],
-            Self::Rio => vec![Capability::Sixel, Capability::RectangularOps],
-            Self::ITerm2 | Self::Wezterm => {
-                vec![Capability::Sixel, Capability::Kitty, Capability::RectangularOps]
-            }
-            Self::Kitty => vec![
-                Capability::Kitty,
-                Capability::RectangularOps,
-                Capability::TextSizingProtocol, // !! TODO: THIS COULD BE SO FUCKING COOL FOR MARKDOWN HEADINGS !!
-            ],
+    #[test]
+    fn pixel_protocols_need_a_cell_size() {
+        let mut info = TerminalInfo::default();
+        info.set_probed(ProbedCapabilities { kitty: true, sixel: false });
+        assert!(!info.supports_images(), "no cell size yet");
 
-            Self::Unsupported(_) => vec![],
-        }
+        info.set_font_size((8, 17));
+        assert!(info.supports_images());
     }
 
     #[cfg(feature = "blog")]
-    pub fn as_protocol(&self) -> ProtocolType {
-        if matches!(
-            self,
-            Self::ITerm2
-                | Self::Wezterm
-                | Self::MinTty
-                | Self::Vscode
-                | Self::Tabby
-                | Self::Hyper
-                | Self::Rio
-        ) {
-            return ProtocolType::Iterm2;
-        } else if self.capabilities().contains(&Capability::Kitty) {
-            return ProtocolType::Kitty;
-        } else if self.capabilities().contains(&Capability::Sixel) {
-            return ProtocolType::Sixel;
-        }
+    #[test]
+    fn halfblocks_needs_neither_a_capability_nor_a_cell_size() {
+        let mut info = TerminalInfo::default();
+        info.set_probed(ProbedCapabilities { kitty: false, sixel: false });
 
-        ProtocolType::Halfblocks
+        assert_eq!(info.protocol(), ProtocolType::Halfblocks);
+        assert!(!info.has_font_size(), "no cell size arrived");
+        assert!(info.supports_images(), "halfblocks must not require a cell size");
+    }
+
+    #[cfg(feature = "blog")]
+    #[test]
+    fn a_probed_client_gets_what_it_reported() {
+        let mut sixel = TerminalInfo::default();
+        sixel.set_probed(ProbedCapabilities { kitty: false, sixel: true });
+        assert_eq!(sixel.protocol(), ProtocolType::Sixel);
+
+        // kitty should be preferred over sixel
+        let mut both = TerminalInfo::default();
+        both.set_probed(ProbedCapabilities { kitty: true, sixel: true });
+        assert_eq!(both.protocol(), ProtocolType::Kitty);
+    }
+
+    #[cfg(feature = "blog")]
+    #[test]
+    fn an_unprobed_client_defaults_to_halfblocks() {
+        assert_eq!(TerminalInfo::default().protocol(), ProtocolType::Halfblocks);
+        assert_eq!(named("kitty(0.48.2)").protocol(), ProtocolType::Halfblocks);
+    }
+
+    #[cfg(feature = "blog")]
+    #[test]
+    fn a_multiplexer_is_pinned_to_halfblocks_whatever_it_claims() {
+        let mut info = named("tmux 3.7b");
+        info.set_probed(ProbedCapabilities { kitty: true, sixel: true });
+        info.set_font_size((16, 32));
+
+        assert!(info.is_multiplexer());
+        assert_eq!(
+            info.protocol(),
+            ProtocolType::Halfblocks,
+            "multiplexers should default to halfblocks"
+        );
+        assert!(info.supports_images(), "halfblocks should be supported everywhere");
+    }
+
+    #[cfg(feature = "blog")]
+    #[test]
+    fn multiplexer_detection_matches_the_whole_leading_token() {
+        assert!(named("tmux 3.7b").is_multiplexer());
+        assert!(!named("tmuxinator 1.0").is_multiplexer());
+        assert!(!named("kitty(0.48.2)").is_multiplexer());
+        assert!(!named("someterm 1.0-tmux").is_multiplexer());
+        assert!(!TerminalInfo::default().is_multiplexer());
     }
 }
