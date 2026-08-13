@@ -64,7 +64,6 @@ clap = { version = "4.5.20", features = [
 color-eyre = "0.6.3"
 config = "0.15.14"
 crossterm = { version = "0.28.1", features = ["serde", "event-stream"] }
-default_variant = "0.1.0"
 derive_deref = "1.1.1"
 directories = "6.0.0"
 figlet-rs = "0.1.5"
@@ -97,6 +96,7 @@ tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "serde"] }
 tui-markdown = { version = "0.3.5", optional = true }
 shellexpand = "3.1.1"
+unicode-width = "0.2.0"
 
 [build-dependencies]
 anyhow = "1.0.90"

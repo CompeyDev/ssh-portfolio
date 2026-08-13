@@ -6,6 +6,7 @@ use color_eyre::Result;
 use figlet_rs::FIGfont;
 use ratatui::prelude::*;
 use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::{Card, CardGrid, Component};
 use crate::action::Action;
@@ -24,13 +25,6 @@ static BANNER: LazyLock<Vec<String>> = LazyLock::new(|| {
         .map(String::from)
         .collect()
 });
-
-#[allow(dead_code)]
-pub(super) fn truncate(s: &str, max: usize) -> String {
-    s.char_indices()
-        .find(|(idx, ch)| idx + ch.len_utf8() > max)
-        .map_or(s.to_string(), |(idx, _)| s[..idx].to_string() + "...")
-}
 
 pub struct Content {
     selected_tab: Arc<AtomicUsize>,
@@ -293,3 +287,80 @@ impl Component for Content {
         Ok(())
     }
 }
+
+/// Truncate `s` to fit `max` terminal columns, adding ellipses at the end if
+/// truncated.
+///
+/// The max size is measured in display columns, not bytes or chars due since
+/// Unicode characters may consume more than one column, despite only being
+/// one byte.
+pub(super) fn truncate(s: &str, max: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
+
+    if s.width() <= max {
+        return s.to_string();
+    }
+
+    // We use a unicode ellipses character which consumes exactly one column
+    let budget = max - 1;
+    let mut out = String::new();
+    let mut used = 0;
+
+    for ch in s.chars() {
+        let width = ch.width().unwrap_or(0);
+        if used + width > budget {
+            break;
+        }
+
+        out.push(ch);
+        used += width;
+    }
+
+    out.push('…');
+    out
+}
+
+#[cfg(test)]
+mod truncate_tests {
+    use super::*;
+
+    #[test]
+    fn never_exceeds_the_budget() {
+        for input in
+            ["kitty(0.32.2)", "SomeVeryLongTerminalName 1.2.3", "日本語のテキストです"]
+        {
+            for max in 0..20 {
+                assert!(
+                    truncate(input, max).width() <= max,
+                    "{input:?} at max={max} overflowed"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wide_characters_count_as_two_columns() {
+        let cjk = "日本語のテキストで"; // 10 chars, 20 columns
+        assert_eq!(cjk.chars().count(), 9);
+        assert_eq!(cjk.width(), 18);
+
+        let out = truncate(cjk, 10);
+        assert!(out.width() <= 10, "got {} columns", out.width());
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn short_input_is_returned_untouched() {
+        assert_eq!(truncate("foot", 10), "foot");
+        assert_eq!(truncate("0123456789", 10), "0123456789");
+    }
+
+    #[test]
+    fn degenerate_budgets_do_not_panic_or_overflow() {
+        assert_eq!(truncate("anything", 0), "");
+        assert_eq!(truncate("anything", 1), "…");
+    }
+}
+
