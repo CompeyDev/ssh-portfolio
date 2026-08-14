@@ -73,14 +73,13 @@
 
         # Base arguments passed to almost all crane invocations
         commonCraneArgs = {
-          # Include source code and other files required to build, exclude `.cargo` containing `cargo-rustc-patch`
+          # Include source code and other files required to build
           src = lib.fileset.toSource {
             root = ./.;
             fileset = lib.fileset.unions ([
-              (lib.fileset.difference (craneLib.fileset.commonCargoSources ./.) (lib.fileset.fromSource ./.cargo))
+              (craneLib.fileset.commonCargoSources ./.)
               (lib.fileset.fromSource ./.config)
               (lib.fileset.fromSource ./assets)
-              (lib.fileset.fromSource ./patches)
               (lib.fileset.fromSource ./src/atproto/lexicons)
             ]);
           };
@@ -97,33 +96,8 @@
           hardeningDisable = [ "fortify" ]; # MUSL does not implementation fortification checks
         };
 
-        # Apply patches located in the `./patches/` dir
-        patches = lib.fileset.fromSource ./patches;
-        cargoVendorDir = builtins.toString (
-          craneLib.vendorCargoDeps (
-            commonCraneArgs
-            // {
-              overrideVendorCargoPackage =
-                p: drv:
-                let
-                  attrs = (lib.groupBy (p: builtins.baseNameOf (builtins.dirOf p)) (lib.fileset.toList patches));
-                  key = "${p.name}-${p.version}";
-                in
-                if (builtins.hasAttr key attrs) then
-                  builtins.toString (drv.overrideAttrs { patches = attrs.${key}; })
-                else
-                  drv;
-            }
-          )
-        );
-
         # Build dependencies separately to have them cached in nix store
-        cargoArtifacts = craneLib.buildDepsOnly (
-          commonCraneArgs
-          // {
-            inherit cargoVendorDir;
-          }
-        );
+        cargoArtifacts = craneLib.buildDepsOnly commonCraneArgs;
 
         # Finally, compile the actual project
         crate =
@@ -133,7 +107,7 @@
           craneLib.buildPackage (
             commonCraneArgs
             // {
-              inherit cargoArtifacts cargoVendorDir;
+              inherit cargoArtifacts;
               doCheck = false;
               cargoExtraArgs = "--locked --no-default-features ${
                 lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
