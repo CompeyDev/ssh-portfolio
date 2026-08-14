@@ -30,11 +30,13 @@ impl TerminalGeometry {
 
 /// Graphics capabilities reported by the client
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct ProbedCapabilities {
+pub struct GraphicsCapabilities {
     /// Supports image rendering using the kitty graphics protocol
     pub kitty: bool,
     /// Supports image rendering using the six pixel bitmap format
     pub sixel: bool,
+    /// Supports image rendering using iTerm2's inline image protocol (OSC 1337)
+    pub iterm2: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -42,7 +44,7 @@ pub struct TerminalInfo {
     #[cfg(feature = "blog")]
     font_size: Option<FontSize>,
     /// `Some` once the probe has finished, whether or not the client answered
-    probed: Option<ProbedCapabilities>,
+    graphics: Option<GraphicsCapabilities>,
     /// The client's terminal name and version, if reported
     reported_name: Option<String>,
 }
@@ -85,7 +87,11 @@ impl TerminalInfo {
     /// The format is not guaranteed, and hence a space or left parenthesis separate is
     /// attempted for the split.
     pub fn leading_token(&self) -> Option<&str> {
-        self.reported_name.as_deref()?.split(['(', ' ']).next()
+        self.reported_name.as_deref().map(Self::leading_token_inner)
+    }
+
+    pub(super) fn leading_token_inner(reported_name: &str) -> &str {
+        reported_name.split(['(', ' ']).next().unwrap_or(reported_name)
     }
 
     /// The graphics protocol to use for this client.
@@ -98,7 +104,8 @@ impl TerminalInfo {
             return ProtocolType::Halfblocks;
         }
 
-        match self.probed {
+        match self.graphics {
+            Some(caps) if caps.iterm2 => ProtocolType::Iterm2,
             Some(caps) if caps.kitty => ProtocolType::Kitty,
             Some(caps) if caps.sixel => ProtocolType::Sixel,
             Some(_) => ProtocolType::Halfblocks, // probed, no support
@@ -106,9 +113,10 @@ impl TerminalInfo {
         }
     }
 
-    /// The probe outcome, or `None` if the probe hasn't finalized.
-    pub fn probed(&self) -> Option<ProbedCapabilities> {
-        self.probed
+    /// The graphics capabilities of the terminal, or `None` if the probe
+    /// hasn't finalized.
+    pub fn graphics(&self) -> Option<GraphicsCapabilities> {
+        self.graphics
     }
 
     /// The full `XTVERSION` response, including the terminal's name and version,
@@ -124,8 +132,8 @@ impl TerminalInfo {
     }
 
     /// Records the probe outcome.
-    pub fn set_probed(&mut self, caps: ProbedCapabilities) {
-        self.probed = Some(caps);
+    pub fn set_probed(&mut self, caps: GraphicsCapabilities) {
+        self.graphics = Some(caps);
     }
 
     /// Sets the font size.
@@ -158,7 +166,7 @@ mod tests {
     #[test]
     fn pixel_protocols_need_a_cell_size() {
         let mut info = TerminalInfo::default();
-        info.set_probed(ProbedCapabilities { kitty: true, sixel: false });
+        info.set_probed(GraphicsCapabilities { kitty: true, sixel: false, iterm2: false });
         assert!(!info.supports_images(), "no cell size yet");
 
         info.set_font_size((8, 17));
@@ -169,7 +177,7 @@ mod tests {
     #[test]
     fn halfblocks_needs_neither_a_capability_nor_a_cell_size() {
         let mut info = TerminalInfo::default();
-        info.set_probed(ProbedCapabilities { kitty: false, sixel: false });
+        info.set_probed(GraphicsCapabilities { kitty: false, sixel: false, iterm2: false });
 
         assert_eq!(info.protocol(), ProtocolType::Halfblocks);
         assert!(!info.has_font_size(), "no cell size arrived");
@@ -180,13 +188,32 @@ mod tests {
     #[test]
     fn a_probed_client_gets_what_it_reported() {
         let mut sixel = TerminalInfo::default();
-        sixel.set_probed(ProbedCapabilities { kitty: false, sixel: true });
+        sixel.set_probed(GraphicsCapabilities { kitty: false, sixel: true, iterm2: false });
         assert_eq!(sixel.protocol(), ProtocolType::Sixel);
 
         // kitty should be preferred over sixel
         let mut both = TerminalInfo::default();
-        both.set_probed(ProbedCapabilities { kitty: true, sixel: true });
+        both.set_probed(GraphicsCapabilities { kitty: true, sixel: true, iterm2: false });
         assert_eq!(both.protocol(), ProtocolType::Kitty);
+    }
+
+    #[cfg(feature = "blog")]
+    #[test]
+    fn iterm2_outranks_even_kitty() {
+        let mut iterm = TerminalInfo::default();
+        iterm.set_probed(GraphicsCapabilities { kitty: true, sixel: true, iterm2: true });
+        iterm.set_font_size((7, 17));
+
+        assert_eq!(iterm.protocol(), ProtocolType::Iterm2);
+        assert!(iterm.supports_images());
+    }
+
+    #[test]
+    fn the_leading_token_is_shared_by_name_derived_checks() {
+        assert_eq!(TerminalInfo::leading_token_inner("iTerm2 3.6.9"), "iTerm2");
+        assert_eq!(TerminalInfo::leading_token_inner("kitty(0.48.2)"), "kitty");
+        assert_eq!(TerminalInfo::leading_token_inner("tmux 3.7b"), "tmux");
+        assert_eq!(TerminalInfo::leading_token_inner("bare"), "bare");
     }
 
     #[cfg(feature = "blog")]
@@ -200,7 +227,7 @@ mod tests {
     #[test]
     fn a_multiplexer_is_pinned_to_halfblocks_whatever_it_claims() {
         let mut info = named("tmux 3.7b");
-        info.set_probed(ProbedCapabilities { kitty: true, sixel: true });
+        info.set_probed(GraphicsCapabilities { kitty: true, sixel: true, iterm2: false });
         info.set_font_size((16, 32));
 
         assert!(info.is_multiplexer());

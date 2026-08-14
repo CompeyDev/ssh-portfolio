@@ -180,8 +180,12 @@ impl SshSession {
             info.set_probed(outcome.caps);
 
             #[cfg(feature = "blog")]
-            if let Some(size) = outcome.cell_size {
-                info.set_font_size(size);
+            if !info.has_font_size() {
+                // PTY request did not hand us any pixel dimensions, and we must query it
+                // over the probe from the terminal
+                if let Some(size) = outcome.cell_size {
+                    info.set_font_size(size);
+                }
             }
 
             if let Some(name) = outcome.name {
@@ -200,16 +204,21 @@ impl SshSession {
     }
 
     /// Start the probe by writing its payload to the client and set its timeout.
-    /// 
-    /// NOTE: This method immediately returns after the payload has reached the 
+    ///
+    /// NOTE: This method immediately returns after the payload has reached the
     /// client, and does not wait for the actual probing to finish.
-    async fn start_probe(&mut self, channel_id: ChannelId, session: &mut Session) {
+    async fn start_probe(
+        &mut self,
+        channel_id: ChannelId,
+        grid: (u16, u16),
+        session: &mut Session,
+    ) {
         if self.probe.lock().await.is_some() {
             tracing::debug!("Capability probe already in progress, not restarting");
             return;
         }
 
-        *self.probe.lock().await = Some(Probe::new());
+        *self.probe.lock().await = Some(Probe::new(grid));
 
         let handle = session.handle();
         if handle.data(channel_id, CryptoVec::from(Probe::query())).await.is_err() {
@@ -332,7 +341,7 @@ impl Handler for SshSession {
         tracing::debug!("dims: {col_width} * {row_height}, pixel: {pix_width} * {pix_height}");
 
         // Start probing client terminal for its capabilities
-        self.start_probe(channel_id, session).await;
+        self.start_probe(channel_id, (col_width as u16, row_height as u16), session).await;
 
         tracing::debug!("Publishing initial pty geometry");
         self.set_geometry(TerminalGeometry {

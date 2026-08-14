@@ -78,7 +78,7 @@ impl ClientInfo {
             return "unknown".to_string();
         };
 
-        match (info.reported_name(), info.probed()) {
+        match (info.reported_name(), info.graphics()) {
             (Some(name), _) => Self::short_name(name),
             (None, Some(_)) => "unnamed".to_string(),
             (None, None) => "probing...".to_string(),
