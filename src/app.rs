@@ -42,7 +42,7 @@ pub struct App {
     // TODO: Refactor into its own `Components` struct
     tabs: Arc<Mutex<Tabs>>,
     content: Arc<Mutex<Content>>,
-    cat: Arc<Mutex<Cat>>,
+    cat: Arc<Mutex<Debbie>>,
     #[cfg(feature = "blog")]
     blog_posts: Arc<Mutex<BlogPosts>>,
     footer: Arc<Mutex<Footer>>,
@@ -54,7 +54,8 @@ pub const TABS: [&str; 3] = ["about", "projects", "blog"];
 
 const PROSE_SIZE: u16 = 76; // banner + intro paragraph without wrapping
 const RAIL_GUTTER: u16 = 2; // gap between prose and rail
-const CAT_RESERVE: u16 = 3; // area reserved for the cat component where nothing else is drawn
+
+const CAT_RESERVE: u16 = Debbie::HEIGHT - 1 + Debbie::Z_ROWS;
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Mode {
@@ -79,7 +80,7 @@ impl App {
         let tabs = Arc::new(Mutex::new(Tabs::new(TABS.to_vec(), Arc::clone(&active_tab))));
         let content = Arc::new(Mutex::new(Content::new(Arc::clone(&active_tab))));
 
-        let cat = Arc::new(Mutex::new(Cat::new()));
+        let cat = Arc::new(Mutex::new(Debbie::new()));
 
         #[cfg(feature = "blog")]
         let rt = tokio::runtime::Handle::current();
