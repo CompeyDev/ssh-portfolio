@@ -365,7 +365,7 @@ impl Moment {
                 .map(|row| {
                     let row = format!("{}{row}", " ".repeat(pad));
                     Line::styled(
-                        format!("{row:<width$}", width = WIDTH),
+                        format!("{row:<WIDTH$}"),
                         Style::default().fg(Color::DarkGray),
                     )
                 })
@@ -489,7 +489,7 @@ impl Component for Debbie {
         let last = body.len() - 1;
         for (i, row) in body.into_iter().enumerate() {
             let row = format!("{}{row}", " ".repeat(body_pad));
-            let row = format!("{row:<width$}", width = WIDTH);
+            let row = format!("{row:<WIDTH$}");
             lines.push(if i == last {
                 Self::border_row(row)
             } else {
