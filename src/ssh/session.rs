@@ -1,16 +1,13 @@
-use std::io::Write;
-use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use color_eyre::eyre::{self, eyre};
-use russh::server::{Auth, Config, Handle, Handler, Msg, Server, Session};
+use russh::server::{Auth, Handle, Handler, Msg, Session};
 use russh::{Channel, ChannelId, CryptoVec, Pty};
-use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tracing::instrument;
 
+use super::writer::TermWriter;
 use crate::app::App;
 use crate::tui::backend::SshBackend;
 use crate::tui::probe::Probe;
@@ -18,112 +15,17 @@ use crate::tui::terminal::{TerminalGeometry, TerminalInfo};
 use crate::tui::{Terminal, Tui};
 use crate::OPTIONS;
 
-/// Number of frames to tolerate in a queue before considering a desync between the
-/// server and the client. Redraw triggered if the threshold is exceeded.
-const FRAME_QUEUE_DEPTH: usize = 8;
+/// Client input is buffered. The sender is throttled by this limit, so that
+/// one client cannot exhaust the memory with keystroke data. russh stops reading
+/// beyond this limit, and the client must wait before sending more data.
+const KEYSTROKE_CHANNEL_CAP: usize = 256;
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1000);
-
-/// A sink implementing [`Write`] which draws frames that ratatui renders over an SSH
-/// connection.
-#[derive(Debug)]
-pub struct TermWriter {
-    sink: Vec<u8>,
-    tx: mpsc::Sender<Vec<u8>>,
-    desynced: Arc<AtomicBool>,
-    queued: Arc<AtomicUsize>,
-}
-
-impl TermWriter {
-    #[instrument(skip(session, channel), level = "trace", fields(channel_id = %channel.id()))]
-    fn new(session: Handle, channel: Channel<Msg>) -> Self {
-        tracing::trace!("Acquiring new SSH writer");
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(FRAME_QUEUE_DEPTH);
-        let channel_id = channel.id();
-        let queued = Arc::new(AtomicUsize::new(0));
-        let drain_queued = Arc::clone(&queued);
-
-        // NOTE: We spawn two separate tasks to drain the request and response channels.
-        //
-        // `Handle::data` sends on a *bounded* channel, so awaiting it from the `flush`
-        // parks the render thread whenever the client has a desync because it is called
-        // from inside the draw loop, which holds a lock on the TUI, which causes a full
-        // deadlock. We fixed this by moving the await into these drain tasks instead of
-        // within the main draw loop
-
-        let mut incoming = channel;
-        tokio::spawn(async move {
-            // recv - Drain all the message requests from the queue. Unless read, the
-            // internal buffer fills up (max size = 100 by default) and the session
-            // fully deadlocks. Discovered when bursts of quick resizes caused the
-            // server to become fully unresponsive
-            while incoming.wait().await.is_some() {}
-            tracing::debug!("SSH channel closed, stopping request drain");
-        });
-
-        tokio::spawn(async move {
-            // send - Drain all data to be sent and zap it to the client
-            while let Some(data) = rx.recv().await {
-                let sent = session.data(channel_id, CryptoVec::from(data)).await;
-                drain_queued.fetch_sub(1, Ordering::Release);
-                if sent.is_err() {
-                    tracing::debug!("SSH channel closed, stopping writer drain");
-                    break;
-                }
-            }
-        });
-
-        Self { sink: Vec::new(), tx, desynced: Arc::new(AtomicBool::new(false)), queued }
-    }
-
-    pub fn desync_flag(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.desynced)
-    }
-
-    pub fn queued_frames(&self) -> Arc<AtomicUsize> {
-        Arc::clone(&self.queued)
-    }
-}
-
-impl Write for TermWriter {
-    #[instrument(skip(self, buf), level = "debug")]
-    #[optimize(speed)]
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        tracing::trace!("Writing {} bytes into SSH terminal writer buffer", buf.len());
-        self.sink.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    #[instrument(skip(self), level = "trace")]
-    #[optimize(speed)]
-    fn flush(&mut self) -> std::io::Result<()> {
-        tracing::trace!("Flushing SSH terminal writer buffer");
-        if self.sink.is_empty() {
-            return Ok(());
-        }
-
-        match self.tx.try_send(std::mem::take(&mut self.sink)) {
-            Ok(()) => {
-                self.queued.fetch_add(1, Ordering::Acquire);
-                Ok(())
-            }
-            Err(mpsc::error::TrySendError::Full(_)) => {
-                // Client and the internal ratatui state have a mismatch. Trigger a
-                // full clear and redraw for the next frame
-                self.desynced.store(true, Ordering::Relaxed);
-                Ok(())
-            }
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                Err(std::io::Error::other("SSH channel closed"))
-            }
-        }
-    }
-}
 
 pub struct SshSession {
     terminal_info: Arc<RwLock<TerminalInfo>>,
     app: Option<Arc<Mutex<App>>>,
-    keystroke_tx: mpsc::UnboundedSender<Vec<u8>>,
+    keystroke_tx: mpsc::Sender<Vec<u8>>,
     geometry_tx: watch::Sender<TerminalGeometry>,
     tui: Arc<RwLock<Option<Tui>>>,
     probe: Arc<Mutex<Option<Probe>>>,
@@ -131,7 +33,7 @@ pub struct SshSession {
 
 impl SshSession {
     pub fn new() -> Self {
-        let (keystroke_tx, keystroke_rx) = mpsc::unbounded_channel();
+        let (keystroke_tx, keystroke_rx) = mpsc::channel(KEYSTROKE_CHANNEL_CAP);
         let (geometry_tx, geometry_rx) = watch::channel(TerminalGeometry::default());
 
         let term_info = Arc::new(RwLock::new(TerminalInfo::default()));
@@ -160,7 +62,7 @@ impl SshSession {
     async fn finish_probe(
         probe: &Arc<Mutex<Option<Probe>>>,
         terminal_info: &Arc<RwLock<TerminalInfo>>,
-        keystroke_tx: &mpsc::UnboundedSender<Vec<u8>>,
+        keystroke_tx: &mpsc::Sender<Vec<u8>>,
     ) {
         let Some(probe) = probe.lock().await.take() else {
             return;
@@ -199,7 +101,7 @@ impl SshSession {
                 "Replaying {} byte(s) typed during the probe",
                 outcome.pending_input.len()
             );
-            let _ = keystroke_tx.send(outcome.pending_input);
+            let _ = keystroke_tx.send(outcome.pending_input).await;
         }
     }
 
@@ -377,6 +279,7 @@ impl Handler for SshSession {
                     tracing::debug!("Keystroke during probe window: {typed:?}, sending");
                     self.keystroke_tx
                         .send(typed)
+                        .await
                         .map_err(|_| eyre!("Failed to send event keystroke data"))?;
                 }
 
@@ -392,6 +295,7 @@ impl Handler for SshSession {
         tracing::debug!("Received keystroke data from SSH: {:?}, sending", data);
         self.keystroke_tx
             .send(data.to_vec())
+            .await
             .map_err(|_| eyre!("Failed to send event keystroke data"))
     }
 
@@ -417,27 +321,5 @@ impl Handler for SshSession {
         .await;
 
         Ok(())
-    }
-}
-
-#[derive(Default)]
-pub struct SshServer;
-
-impl SshServer {
-    #[instrument(skip(config), name = "ssh")]
-    pub async fn start(addr: SocketAddr, config: Config) -> eyre::Result<()> {
-        let listener = TcpListener::bind(addr).await?;
-        tracing::info!("SSH server listening!");
-
-        Self.run_on_socket(Arc::new(config), &listener).await.map_err(|err| eyre!(err))
-    }
-}
-
-impl Server for SshServer {
-    type Handler = SshSession;
-
-    #[instrument(skip(self))]
-    fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
-        tokio::task::block_in_place(SshSession::new)
     }
 }

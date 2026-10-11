@@ -14,7 +14,7 @@ use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
 use serde::{Deserialize, Serialize};
 use status::TuiStatus;
 use tokio::runtime::Handle;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender, UnboundedSender};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::{block_in_place, JoinHandle};
 use tokio::time::{interval, sleep, timeout};
@@ -44,13 +44,18 @@ pub enum Event {
 
 pub type Terminal = ratatui::Terminal<SshBackend>;
 
+/// Buffered TUI events are capped. Ticks and renders are not useful once
+/// they are stale, so there is no point keeping them in memory, older ones
+/// are dropped once we hit this limit.
+const EVENT_CHANNEL_CAP: usize = 256;
+
 #[derive(Debug)]
 pub struct Tui {
     pub terminal: Arc<Mutex<Terminal>>,
     pub task: JoinHandle<()>,
     pub cancellation_token: CancellationToken,
-    pub event_rx: UnboundedReceiver<Event>,
-    pub event_tx: UnboundedSender<Event>,
+    pub event_rx: Receiver<Event>,
+    pub event_tx: Sender<Event>,
     pub resume_tx: Option<UnboundedSender<()>>,
     pub status: Arc<RwLock<TuiStatus>>,
     pub frame_rate: f64,
@@ -61,7 +66,7 @@ pub struct Tui {
 
 impl Tui {
     pub fn new(terminal: Arc<Mutex<Terminal>>) -> Result<Self> {
-        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_CAP);
         Ok(Self {
             terminal,
             task: tokio::spawn(async {}),
@@ -115,7 +120,7 @@ impl Tui {
     #[optimize(speed)]
     async fn event_loop(
         status: Arc<RwLock<TuiStatus>>,
-        event_tx: UnboundedSender<Event>,
+        event_tx: Sender<Event>,
         cancellation_token: CancellationToken,
         tick_rate: f64,
         frame_rate: f64,
@@ -124,7 +129,7 @@ impl Tui {
         let mut render_interval = interval(Duration::from_secs_f64(1.0 / frame_rate));
 
         // if this fails, then it's likely a bug in the calling code
-        event_tx.send(Event::Init).expect("failed to send init event");
+        event_tx.send(Event::Init).await.expect("failed to send init event");
 
         let suspension_status = Arc::clone(&status);
         loop {
@@ -137,9 +142,10 @@ impl Tui {
                 _ = render_interval.tick() => Event::Render,
             };
 
-            if event_tx.send(event).is_err() {
-                // the receiver has been dropped, so there's no point in continuing the loop
-                break;
+            // Discard stale events if the consumer has fallen behind
+            match event_tx.try_send(event) {
+                Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
+                Err(mpsc::error::TrySendError::Closed(_)) => break,
             }
         }
         cancellation_token.cancel();

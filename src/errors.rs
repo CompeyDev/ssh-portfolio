@@ -36,7 +36,12 @@ pub fn init() -> Result<()> {
                 .lineno_suffix(true)
                 .verbosity(better_panic::Verbosity::Full)
                 .create_panic_handler()(panic_info);
+        }
 
+        if env::var(format!("{}_ABORT_ON_PANIC", crate::config::PROJECT_NAME.clone())).is_ok()
+        {
+            // Unless specified, we try to recover from panics rather than aborting the
+            // process
             std::process::exit(libc::EXIT_FAILURE);
         }
     }));

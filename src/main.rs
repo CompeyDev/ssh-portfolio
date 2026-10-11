@@ -54,23 +54,31 @@ async fn main() -> Result<()> {
     let ssh_socket_addr = SSH_SOCKET_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
     let web_server_addr = WEB_SERVER_ADDR.ok_or(eyre!("Invalid host IP provided"))?;
 
-    loop {
-        let task = tokio::task::spawn(async move {
-            let ssh_config = ssh_config();
-            tokio::select! {
-                ssh_res = SshServer::start(ssh_socket_addr, ssh_config) => ssh_res,
-                web_res = WebLandingServer::start(web_server_addr) => web_res.map_err(|err| eyre!(err))
-            }
-        });
+    tokio::try_join!(
+        supervised("ssh", || SshServer::start(ssh_socket_addr, ssh_config())),
+        supervised("web", || async move {
+            WebLandingServer::start(web_server_addr).await.map_err(|err| eyre!(err))
+        }),
+    )?;
 
-        match task.await {
-            Ok(res) => break res,
-            Err(err) => {
-                if err.is_panic() {
-                    tracing::error!("Application panicked, recovering...");
-                    std::panic::resume_unwind(err.into_panic());
-                }
+    Ok(())
+}
+
+/// Runs a server's `Future`, restarting the task if it panics. A panic in
+/// one server's task does not affect the other.
+/// 
+/// An error is only returned in case the error is unrecoverable.
+async fn supervised<Fut>(name: &str, mut server: impl FnMut() -> Fut) -> Result<()>
+where
+    Fut: std::future::Future<Output = Result<()>> + Send + 'static, {
+    loop {
+        match tokio::spawn(server()).await {
+            Ok(result) => break result,
+            Err(err) if err.is_panic() => {
+                tracing::error!("The {name} server panicked; restarting it");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
+            Err(err) => break Err(eyre!(err)),
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::io::{Error, ErrorKind};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -36,7 +37,7 @@ pub struct App {
     action_tx: mpsc::UnboundedSender<Action>,
     action_rx: mpsc::UnboundedReceiver<Action>,
 
-    ssh_keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    ssh_keystroke_rx: mpsc::Receiver<Vec<u8>>,
     geometry_rx: watch::Receiver<TerminalGeometry>,
 
     // TODO: Refactor into its own `Components` struct
@@ -63,6 +64,21 @@ pub enum Mode {
     Home,
 }
 
+/// Differentiates a real draw error from the component being busy. Useful to prevent
+/// tearing, as `try_draw` does not flush or swap the buffer in this case. 
+const FRAME_BUSY: ErrorKind = ErrorKind::WouldBlock;
+
+fn try_component<T>(
+    component: &Arc<Mutex<T>>,
+    f: impl FnOnce(&mut T) -> Result<Option<Action>>,
+) -> Result<Option<Action>> {
+    // Not a blocking lock, in order to prevent a potential deadlock
+    match component.try_lock() {
+        Ok(mut guard) => f(&mut guard),
+        Err(_) => Ok(None),
+    }
+}
+
 impl App {
     pub const MIN_TUI_DIMS: (u16, u16) = (105, 25);
 
@@ -70,7 +86,7 @@ impl App {
         terminal_info: Arc<RwLock<TerminalInfo>>,
         tick_rate: f64,
         frame_rate: f64,
-        keystroke_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+        keystroke_rx: mpsc::Receiver<Vec<u8>>,
         geometry_rx: watch::Receiver<TerminalGeometry>,
     ) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
@@ -134,7 +150,7 @@ impl App {
 
         // Force the dimensions to be validated before rendering anything by sending a `Resize` event
         let term_size = tui.terminal.try_lock()?.size()?;
-        tui.event_tx.send(Event::Resize(term_size.width, term_size.height))?;
+        tui.event_tx.send(Event::Resize(term_size.width, term_size.height)).await?;
 
         // Blocking initialization logic for tui and components
         block_in_place(|| {
@@ -208,16 +224,17 @@ impl App {
                     _ => {}
                 };
 
-                // Handle events for each component
-                if let Some(action) = self.tabs.try_lock()?.handle_events(Some(event.clone()))? {
+                // Components which we cannot lock are busy. Skip them for now, rather than erroring
+                // at the session level
+                if let Some(action) = try_component(&self.tabs, |c| c.handle_events(Some(event.clone())))? {
                     action_tx.send(action)?;
                 }
 
-                if let Some(action) = self.content.try_lock()?.handle_events(Some(event.clone()))? {
+                if let Some(action) = try_component(&self.content, |c| c.handle_events(Some(event.clone())))? {
                     action_tx.send(action)?;
                 }
 
-                if let Some(action) = self.cat.try_lock()?.handle_events(Some(event.clone()))? {
+                if let Some(action) = try_component(&self.cat, |c| c.handle_events(Some(event.clone())))? {
                     action_tx.send(action)?;
                 }
             }
@@ -270,20 +287,26 @@ impl App {
                     self.last_tick_key_events.drain(..);
                 }
 
-                // Esc and q back out of whatever is on top before they quit. The
-                // components clear their own state when they see `Quit` below, so this
-                // must read the state *before* the broadcast.
+                // Esc and q back out of whatever is on top before they quit. The components 
+                // clear their own state when they see `Quit` below, so this must read the state 
+                // *before* the broadcast. Let's wait for the busy components to finish before 
+                // actually propagating the signal to quit the session
                 Action::Quit => {
                     #[cfg(feature = "blog")]
-                    let nested = self.blog_posts.try_lock()?.is_in_post();
+                    let nested = self.blog_posts.try_lock().map_or(true, |c| c.is_in_post());
                     #[cfg(not(feature = "blog"))]
                     let nested = false;
 
-                    self.should_quit = !nested && !self.help.try_lock()?.is_visible();
+                    let help_visible = self.help.try_lock().map_or(true, |c| c.is_visible());
+                    self.should_quit = !nested && !help_visible;
                 }
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
-                Action::ClearScreen => tui.terminal.try_lock()?.clear()?,
+                Action::ClearScreen => {
+                    if let Ok(mut term) = tui.terminal.try_lock() {
+                        term.clear()?;
+                    }
+                }
                 Action::Resize(w, h) => {
                     self.needs_resize = w < Self::MIN_TUI_DIMS.0 || h < Self::MIN_TUI_DIMS.1;
                     self.resize(tui, w, h)?;
@@ -292,33 +315,37 @@ impl App {
                 _ => {}
             }
 
-            // Update each component
-            if let Some(action) = self.tabs.try_lock()?.update(action.clone())? {
+            // Update each component, skipping any we cannot lock this round
+            if let Some(action) = try_component(&self.tabs, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
 
-            if let Some(action) = self.content.try_lock()?.update(action.clone())? {
+            if let Some(action) = try_component(&self.content, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
 
-            if let Some(action) = self.cat.try_lock()?.update(action.clone())? {
+            if let Some(action) = try_component(&self.cat, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
 
             #[cfg(feature = "blog")]
-            if let Some(action) = self.blog_posts.try_lock()?.update(action.clone())? {
+            if let Some(action) =
+                try_component(&self.blog_posts, |c| c.update(action.clone()))?
+            {
                 self.action_tx.send(action)?;
             }
 
-            if let Some(action) = self.footer.try_lock()?.update(action.clone())? {
+            if let Some(action) = try_component(&self.footer, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
 
-            if let Some(action) = self.client_info.try_lock()?.update(action.clone())? {
+            if let Some(action) =
+                try_component(&self.client_info, |c| c.update(action.clone()))?
+            {
                 self.action_tx.send(action)?;
             }
 
-            if let Some(action) = self.help.try_lock()?.update(action.clone())? {
+            if let Some(action) = try_component(&self.help, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
         }
@@ -328,7 +355,10 @@ impl App {
 
     pub fn resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
         let geometry = *self.geometry_rx.borrow();
-        let mut term = tui.terminal.try_lock()?;
+        let Ok(mut term) = tui.terminal.try_lock() else {
+            // Terminal is busy, skip the resize until it is ready
+            return Ok(());
+        };
 
         term.backend_mut().dims = (w, h);
         term.backend_mut().pixel = (geometry.pixel_width, geometry.pixel_height);
@@ -339,7 +369,10 @@ impl App {
     }
 
     fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        let mut term = tui.terminal.try_lock()?;
+        let Ok(mut term) = tui.terminal.try_lock() else {
+            // Skip this frame if the terminal is busy
+            return Ok(());
+        };
 
         if term.backend().needs_redraw() {
             // Frame got dropped because the client could not keep up, force a clear
@@ -394,7 +427,7 @@ impl App {
             return Ok(());
         }
 
-        term.try_draw(|frame| {
+        let result = term.try_draw(|frame| {
             let full = frame.area();
             let [header, body, footer_area] = Layout::vertical([
                 Constraint::Length(3),
@@ -413,7 +446,7 @@ impl App {
             );
 
             // Render the tabs
-            let mut tabs = self.tabs.try_lock().map_err(std::io::Error::other)?;
+            let mut tabs = self.tabs.try_lock().map_err(|_| Error::from(FRAME_BUSY))?;
             let current_tab = tabs.current_tab();
             tabs.draw(
                 frame,
@@ -424,7 +457,7 @@ impl App {
                     height: header.height,
                 },
             )
-            .map_err(std::io::Error::other)?;
+            .map_err(Error::other)?;
             drop(tabs);
 
             // Render the frame
@@ -448,9 +481,9 @@ impl App {
 
                 self.client_info
                     .try_lock()
-                    .map_err(std::io::Error::other)?
+                    .map_err(|_| Error::from(FRAME_BUSY))?
                     .draw(frame, Rect { height: 6.min(rail.height), ..rail })
-                    .map_err(std::io::Error::other)?;
+                    .map_err(Error::other)?;
 
                 content_area =
                     Rect { width: prose.width.saturating_sub(RAIL_GUTTER), ..prose };
@@ -462,9 +495,9 @@ impl App {
                     // Render the post selection list if the blog tab is selected
                     self.blog_posts
                         .try_lock()
-                        .map_err(std::io::Error::other)?
+                        .map_err(|_| Error::from(FRAME_BUSY))?
                         .draw(frame, content_area)
-                        .map_err(std::io::Error::other)?;
+                        .map_err(Error::other)?;
                 }
 
                 #[cfg(not(feature = "blog"))]
@@ -480,35 +513,40 @@ impl App {
             } else {
                 self.content
                     .try_lock()
-                    .map_err(std::io::Error::other)?
+                    .map_err(|_| Error::from(FRAME_BUSY))?
                     .draw(frame, content_area)
-                    .map_err(std::io::Error::other)?;
+                    .map_err(Error::other)?;
             }
 
             // Render the eepy cat :3
             self.cat
                 .try_lock()
-                .map_err(std::io::Error::other)?
+                .map_err(|_| Error::from(FRAME_BUSY))?
                 .draw(frame, body)
-                .map_err(std::io::Error::other)?;
+                .map_err(Error::other)?;
 
             // Render the footer, minus the cat
             self.footer
                 .try_lock()
-                .map_err(std::io::Error::other)?
+                .map_err(|_| Error::from(FRAME_BUSY))?
                 .draw(frame, footer_area)
-                .map_err(std::io::Error::other)?;
+                .map_err(Error::other)?;
 
             // The help overlay sits above everything else
             self.help
                 .try_lock()
-                .map_err(std::io::Error::other)?
+                .map_err(|_| Error::from(FRAME_BUSY))?
                 .draw(frame, full)
-                .map_err(std::io::Error::other)?;
+                .map_err(Error::other)?;
 
-            Ok::<_, std::io::Error>(())
-        })?;
+            Ok::<_, Error>(())
+        });
 
-        Ok(())
+        match result {
+            Ok(_) => Ok(()),
+            // A component was busy, let's skip this frame and let the next tick redraw
+            Err(err) if err.kind() == FRAME_BUSY => Ok(()),
+            Err(err) => Err(err.into()),
+        }
     }
 }
