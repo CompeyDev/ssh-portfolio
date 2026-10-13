@@ -69,7 +69,7 @@ impl ClientInfo {
     }
 
     /// Fetches the terminal's label.
-    /// 
+    ///
     /// The process of probing the terminal is asynchronous and not handled by this method.
     /// A value based on the current state of the probe is given, and it may not know the
     /// label yet.

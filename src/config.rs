@@ -137,8 +137,7 @@ fn project_directory() -> Option<ProjectDirs> {
 #[optimize(speed)]
 fn private_key_deserialize<'de, D>(deserializer: D) -> Result<Vec<PrivateKey>, D::Error>
 where
-    D: Deserializer<'de>,
-{
+    D: Deserializer<'de>, {
     let keys = HashMap::<String, String>::deserialize(deserializer)?
         .into_iter()
         .map(|(pem_type, pem_or_path)| {
@@ -195,8 +194,7 @@ pub struct KeyBindings(pub HashMap<Mode, HashMap<Vec<KeyEvent>, Action>>);
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
+        D: Deserializer<'de>, {
         let parsed_map = HashMap::<Mode, HashMap<String, Action>>::deserialize(deserializer)?;
 
         let keybindings = parsed_map
@@ -391,8 +389,7 @@ pub struct Styles(pub HashMap<Mode, HashMap<String, Style>>);
 impl<'de> Deserialize<'de> for Styles {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
-    {
+        D: Deserializer<'de>, {
         let parsed_map = HashMap::<Mode, HashMap<String, String>>::deserialize(deserializer)?;
 
         let styles = parsed_map

@@ -1,6 +1,7 @@
 use std::io::{Error, ErrorKind};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::time::Instant;
 
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -40,6 +41,10 @@ pub struct App {
     ssh_keystroke_rx: mpsc::Receiver<Vec<u8>>,
     geometry_rx: watch::Receiver<TerminalGeometry>,
 
+    boot: Boot,
+    /// When the connection intro animation started, or `None` if it has finished
+    boot_started: Option<Instant>,
+
     // TODO: Refactor into its own `Components` struct
     tabs: Arc<Mutex<Tabs>>,
     content: Arc<Mutex<Content>>,
@@ -65,7 +70,7 @@ pub enum Mode {
 }
 
 /// Differentiates a real draw error from the component being busy. Useful to prevent
-/// tearing, as `try_draw` does not flush or swap the buffer in this case. 
+/// tearing, as `try_draw` does not flush or swap the buffer in this case.
 const FRAME_BUSY: ErrorKind = ErrorKind::WouldBlock;
 
 fn try_component<T>(
@@ -84,12 +89,14 @@ impl App {
 
     pub fn new(
         terminal_info: Arc<RwLock<TerminalInfo>>,
+        username: Arc<RwLock<Option<String>>>,
         tick_rate: f64,
         frame_rate: f64,
         keystroke_rx: mpsc::Receiver<Vec<u8>>,
         geometry_rx: watch::Receiver<TerminalGeometry>,
     ) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
+        let boot = Boot::new(Arc::clone(&terminal_info), username);
 
         // Initialize components
         let active_tab = Arc::new(AtomicUsize::new(0));
@@ -126,6 +133,9 @@ impl App {
             ssh_keystroke_rx: keystroke_rx,
             geometry_rx,
 
+            boot,
+            boot_started: None,
+
             tabs,
             content,
             cat,
@@ -151,6 +161,9 @@ impl App {
         // Force the dimensions to be validated before rendering anything by sending a `Resize` event
         let term_size = tui.terminal.try_lock()?.size()?;
         tui.event_tx.send(Event::Resize(term_size.width, term_size.height)).await?;
+
+        // Cue the initial connection loading animation
+        self.boot_started = Some(Instant::now());
 
         // Blocking initialization logic for tui and components
         block_in_place(|| {
@@ -240,8 +253,13 @@ impl App {
             }
 
             Some(keystroke_data) = self.ssh_keystroke_rx.recv() => {
-                let key_event = KeyCode::from_xterm_seq(&keystroke_data[..]).into_key_event();
-                block_in_place(|| self.handle_key_event(key_event))?;
+                if self.boot_started.take().is_some() {
+                    // Connection animation playing, any key press is treated as a skip
+                    self.action_tx.send(Action::ClearScreen)?;
+                } else {
+                    let key_event = KeyCode::from_xterm_seq(&keystroke_data[..]).into_key_event();
+                    block_in_place(|| self.handle_key_event(key_event))?;
+                }
             }
 
             Ok(()) = self.geometry_rx.changed() => {
@@ -287,9 +305,9 @@ impl App {
                     self.last_tick_key_events.drain(..);
                 }
 
-                // Esc and q back out of whatever is on top before they quit. The components 
-                // clear their own state when they see `Quit` below, so this must read the state 
-                // *before* the broadcast. Let's wait for the busy components to finish before 
+                // Esc and q back out of whatever is on top before they quit. The components
+                // clear their own state when they see `Quit` below, so this must read the state
+                // *before* the broadcast. Let's wait for the busy components to finish before
                 // actually propagating the signal to quit the session
                 Action::Quit => {
                     #[cfg(feature = "blog")]
@@ -427,6 +445,9 @@ impl App {
             return Ok(());
         }
 
+        let boot_elapsed = self.boot_started.map(|t| t.elapsed().as_secs_f32());
+        let booting = boot_elapsed.is_some_and(|e| e < BOOT_TOTAL);
+
         let result = term.try_draw(|frame| {
             let full = frame.area();
             let [header, body, footer_area] = Layout::vertical([
@@ -436,7 +457,6 @@ impl App {
             ])
             .areas(full);
 
-            // Render the domain name text
             frame.render_widget(
                 Paragraph::new(Line::from(Span::styled(
                     "devcomp.xyz ",
@@ -444,6 +464,15 @@ impl App {
                 ))),
                 Rect { x: header.x + 2, y: header.y + 2, width: 14, height: 1 },
             );
+
+            if booting {
+                // During the boot, we still draw the chrome and the domain name, just without
+                // the interactable tabs
+                let inner = content_frame(frame, body, &[], 0);
+                let content_area = inner.inner(Margin { horizontal: 2, vertical: 1 });
+                self.boot.draw(frame, content_area, boot_elapsed.unwrap_or(0.0));
+                return Ok(());
+            }
 
             // Render the tabs
             let mut tabs = self.tabs.try_lock().map_err(|_| Error::from(FRAME_BUSY))?;
@@ -541,6 +570,11 @@ impl App {
 
             Ok::<_, Error>(())
         });
+
+        if boot_elapsed.is_some_and(|e| e >= BOOT_TOTAL) {
+            // Boot finished and has faded, render TUI on next cycle
+            self.boot_started = None;
+        }
 
         match result {
             Ok(_) => Ok(()),

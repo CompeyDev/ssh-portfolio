@@ -19,11 +19,13 @@ use crate::OPTIONS;
 /// one client cannot exhaust the memory with keystroke data. russh stops reading
 /// beyond this limit, and the client must wait before sending more data.
 const KEYSTROKE_CHANNEL_CAP: usize = 256;
+const MAX_USERNAME_LEN: usize = 64;
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1000);
 
 pub struct SshSession {
     terminal_info: Arc<RwLock<TerminalInfo>>,
+    username: Arc<RwLock<Option<String>>>,
     app: Option<Arc<Mutex<App>>>,
     keystroke_tx: mpsc::Sender<Vec<u8>>,
     geometry_tx: watch::Sender<TerminalGeometry>,
@@ -37,11 +39,14 @@ impl SshSession {
         let (geometry_tx, geometry_rx) = watch::channel(TerminalGeometry::default());
 
         let term_info = Arc::new(RwLock::new(TerminalInfo::default()));
+        let username = Arc::new(RwLock::new(None));
 
         Self {
             terminal_info: Arc::clone(&term_info),
+            username: Arc::clone(&username),
             app: App::new(
                 term_info,
+                username,
                 OPTIONS.tick_rate,
                 OPTIONS.frame_rate,
                 keystroke_rx,
@@ -174,6 +179,13 @@ impl Handler for SshSession {
 
     #[instrument(skip(self), name = "user_login", fields(method = "none"))]
     async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
+        // Sanitize the username: strip control characters & bound it by length
+        let name: String =
+            user.chars().filter(|c| !c.is_control()).take(MAX_USERNAME_LEN).collect();
+        if !name.is_empty() {
+            *self.username.write().await = Some(name);
+        }
+
         Ok(Auth::Accept)
     }
 

@@ -66,7 +66,7 @@ async fn main() -> Result<()> {
 
 /// Runs a server's `Future`, restarting the task if it panics. A panic in
 /// one server's task does not affect the other.
-/// 
+///
 /// An error is only returned in case the error is unrecoverable.
 async fn supervised<Fut>(name: &str, mut server: impl FnMut() -> Fut) -> Result<()>
 where

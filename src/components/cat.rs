@@ -8,8 +8,8 @@ use super::Component;
 use crate::action::Action;
 
 // Dimensions
-const WIDTH: usize = 24;
-const HEIGHT: u16 = 5;
+pub(crate) const WIDTH: u16 = 24;
+pub(crate) const HEIGHT: u16 = 5;
 
 /// Rows above Debbie, shared by the sleep z's and the meow bubble
 const EEPY_ROWS: u16 = 3;
@@ -91,7 +91,7 @@ const FLICK: Habit = Habit { every: 2.6, at: 0.3, lasts: 0.35 };
 
 const SLEEPY_FOR: f32 = 1.5; // right before sleeping
 
-const EARS: &str = "/\\_/\\";
+// Left and right twitching ears during the asleep state
 const EARS_L: &str = "|\\_/\\";
 const EARS_R: &str = "/\\_/|";
 
@@ -119,6 +119,21 @@ enum Pose {
     Squash,
     Half,
     Bow,
+}
+
+impl Pose {
+    /// Which keyframe the stretch sequence shows at `t` seconds in
+    fn at(mut t: f32) -> Self {
+        for (length, pose) in STRETCH_KEYFRAMES {
+            if t < length {
+                return pose;
+            }
+
+            t -= length;
+        }
+
+        Pose::Squash
+    }
 }
 
 /// Deborah Whiskersworth III, whom I fondly refer to as Debbie, is a resident
@@ -168,24 +183,11 @@ impl Moment {
         };
 
         let pose = match state {
-            State::Stretching => stretch.map(Self::stretch_pose),
+            State::Stretching => stretch.map(Pose::at),
             _ => None,
         };
 
         Self { t_wake, t_idle, state, pose }
-    }
-
-    /// Which keyframe the stretch sequence shows at `t` seconds
-    fn stretch_pose(mut t: f32) -> Pose {
-        for (length, pose) in STRETCH_KEYFRAMES {
-            if t < length {
-                return pose;
-            }
-
-            t -= length;
-        }
-
-        Pose::Squash
     }
 
     /// How long Debbie has been asleep, zero when awake
@@ -231,28 +233,30 @@ impl Moment {
         }
     }
 
-    fn ears(&self) -> &'static str {
+    fn ear_twitch(&self) -> Option<&'static str> {
         let asleep_for = self.asleep_for();
         match self.state {
-            State::Asleep if EAR_TWITCH_L.active(asleep_for) => EARS_L,
-            State::Asleep if EAR_TWITCH_R.active(asleep_for) => EARS_R,
-            _ => EARS,
+            State::Asleep if EAR_TWITCH_L.active(asleep_for) => Some(EARS_L),
+            State::Asleep if EAR_TWITCH_R.active(asleep_for) => Some(EARS_R),
+            _ => None,
         }
     }
 
     fn tail(&self) -> &'static str {
         let flicking = self.state == State::Awake && FLICK.active(self.t_wake);
-        match flicking {
-            true => "~'",
-            false => "~,",
+        if flicking {
+            "~'"
+        } else {
+            "~,"
         }
     }
 
     fn toe(&self) -> &'static str {
         let twitching = self.state == State::Asleep && TOE_TWITCH.active(self.asleep_for());
-        match twitching {
-            true => ">",
-            false => ",",
+        if twitching {
+            ">"
+        } else {
+            ","
         }
     }
 
@@ -272,13 +276,7 @@ impl Moment {
 
     /// Full body art for when Debbie is awake
     fn loaf(&self) -> Vec<String> {
-        vec![
-            format!("    {}", self.ears()),
-            format!("  =( {} )----.", self.eyes()),
-            format!("    {}      `.", self.muzzle()),
-            "   (             )".to_string(),
-            format!("    `,__{}____,__,'{}", self.toe(), self.tail()),
-        ]
+        art::loaf(self.eyes(), self.muzzle(), self.toe(), self.tail())
     }
 
     /// Full body art for when Debbie is asleep. Flat, head on her paws.
@@ -290,20 +288,12 @@ impl Moment {
             && (asleep_for % BREATH) / BREATH < BREATH_IN
             && (asleep_for / BREATH) as u32 % SIGH_EVERY == SIGH_EVERY - 1;
 
-        let bottom = match wrapped {
-            true => format!("  ~-`,__{}____,__,'", self.toe()),
-            false => format!("    `,__{}____,__,'~,", self.toe()),
-        };
-
-        [
-            format!("    {}", self.ears()),
-            format!("  =( {} )----.", self.eyes()),
-            format!("    {}      `.", self.muzzle()),
-        ]
-        .into_iter()
-        .chain(sighing.then(|| "   ;             )".to_string()))
-        .chain([bottom])
-        .collect()
+        match self.ear_twitch() {
+            Some(ears) => {
+                art::flat_eared(ears, self.eyes(), self.muzzle(), self.toe(), wrapped, sighing)
+            }
+            None => art::flat(self.eyes(), self.muzzle(), self.toe(), wrapped, sighing),
+        }
     }
 
     //
@@ -311,21 +301,11 @@ impl Moment {
     //
 
     fn half(&self) -> Vec<String> {
-        vec![
-            "     /\\_/\\".to_string(),
-            format!("   =( {} )_,   ,--.", self.eyes()),
-            format!("     {}  `-(     )", self.muzzle()),
-            format!(" __(_)________(_____,'{}", self.tail()),
-        ]
+        art::half(self.eyes(), self.muzzle(), self.tail())
     }
 
     fn bow(&self) -> Vec<String> {
-        vec![
-            "     /\\_/\\      ,--.".to_string(),
-            format!("   =( {} )_,-`     \\", self.eyes()),
-            format!("     {}    (      )", self.muzzle()),
-            format!(" __(_)________(_____,'{}", self.tail()),
-        ]
+        art::bow(self.eyes(), self.muzzle(), self.tail())
     }
 
     /// The z's start at the head, increasing in size as they go higher
@@ -337,15 +317,13 @@ impl Moment {
                 let age = (asleep_for + cycle - BREATH * f32::from(index)) % cycle;
                 (age < Z_LIFETIME).then(|| {
                     let progress = age / Z_LIFETIME;
-                    let glyph = match progress < 0.5 {
-                        true => 'z',
-                        false => 'Z',
-                    };
+                    let glyph = if progress < 0.5 { 'z' } else { 'Z' };
 
                     // Fade them out slowly
-                    let style = match (0.15..=0.6).contains(&progress) {
-                        true => Style::default().fg(Color::Magenta).bold(),
-                        false => Style::default().fg(Color::DarkGray),
+                    let style = if (0.15..=0.6).contains(&progress) {
+                        Style::default().fg(Color::Magenta).bold()
+                    } else {
+                        Style::default().fg(Color::DarkGray)
                     };
 
                     let row = (EEPY_ROWS - 1) - (progress * f32::from(EEPY_ROWS)) as u16;
@@ -365,7 +343,7 @@ impl Moment {
                 .map(|row| {
                     let row = format!("{}{row}", " ".repeat(pad));
                     Line::styled(
-                        format!("{row:<WIDTH$}"),
+                        format!("{row:<width$}", width = usize::from(WIDTH)),
                         Style::default().fg(Color::DarkGray),
                     )
                 })
@@ -374,8 +352,81 @@ impl Moment {
                 let zs = self.zs();
                 (0..EEPY_ROWS).map(|row| Z::line(&zs, row, pad as u16)).collect()
             }
-            _ => (0..EEPY_ROWS).map(|_| Line::raw(" ".repeat(WIDTH))).collect(),
+            _ => (0..EEPY_ROWS).map(|_| Line::raw(" ".repeat(usize::from(WIDTH)))).collect(),
         }
+    }
+}
+
+/// Simple builders to create Debbie's different body arts. Shared by both this component
+/// and the boot component.
+pub(crate) mod art {
+    /// Debbie's default upright ears
+    const EARS: &str = "/\\_/\\";
+
+    /// Full body art for when Debbie is awake
+    pub fn loaf(eyes: &str, muzzle: &str, toe: &str, tail: &str) -> Vec<String> {
+        vec![
+            format!("    {EARS}"),
+            format!("  =( {eyes} )----."),
+            format!("    {muzzle}      `."),
+            "   (             )".to_string(),
+            format!("    `,__{toe}____,__,'{tail}"),
+        ]
+    }
+
+    /// Flat, head on her paws.
+    ///
+    /// `wrapped` curls the tail around the front, `chest` adds the deep-sigh.
+    pub fn flat(
+        eyes: &str,
+        muzzle: &str,
+        toe: &str,
+        wrapped: bool,
+        chest: bool,
+    ) -> Vec<String> {
+        flat_eared(EARS, eyes, muzzle, toe, wrapped, chest)
+    }
+
+    /// `flat` but allows specifying custom ear art. Useful for making ears twitch.
+    pub(super) fn flat_eared(
+        ears: &str,
+        eyes: &str,
+        muzzle: &str,
+        toe: &str,
+        wrapped: bool,
+        chest: bool,
+    ) -> Vec<String> {
+        let bottom = if wrapped {
+            format!("  ~-`,__{toe}____,__,'")
+        } else {
+            format!("    `,__{toe}____,__,'~,")
+        };
+
+        [format!("    {ears}"), format!("  =( {eyes} )----."), format!("    {muzzle}      `.")]
+            .into_iter()
+            .chain(chest.then(|| "   ;             )".to_string()))
+            .chain([bottom])
+            .collect()
+    }
+
+    /// Front dipped, first lift out of the loaf
+    pub fn half(eyes: &str, muzzle: &str, tail: &str) -> Vec<String> {
+        vec![
+            format!("     {EARS}"),
+            format!("   =( {eyes} )_,   ,--."),
+            format!("     {muzzle}  `-(     )"),
+            format!(" __(_)________(_____,'{tail}"),
+        ]
+    }
+
+    /// Full body stretch: front paws out, haunches up
+    pub fn bow(eyes: &str, muzzle: &str, tail: &str) -> Vec<String> {
+        vec![
+            format!("     {EARS}      ,--."),
+            format!("   =( {eyes} )_,-`     \\"),
+            format!("     {muzzle}    (      )"),
+            format!(" __(_)________(_____,'{tail}"),
+        ]
     }
 }
 
@@ -410,7 +461,7 @@ impl Z {
             cursor = column + 1;
         }
 
-        spans.push(Span::raw(" ".repeat(WIDTH - usize::from(cursor))));
+        spans.push(Span::raw(" ".repeat(usize::from(WIDTH) - usize::from(cursor))));
         Line::from(spans)
     }
 }
@@ -466,14 +517,15 @@ impl Component for Debbie {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Result<()> {
-        if area.width < WIDTH as u16 + 2 || area.height < HEIGHT {
+        if area.width < WIDTH + 2 || area.height < HEIGHT {
             return Ok(());
         }
 
+        let width = usize::from(WIDTH);
         let now = self.now();
         let body = now.body();
         let body_pad =
-            WIDTH - body.iter().map(|row| row.chars().count()).max().unwrap_or(WIDTH);
+            width - body.iter().map(|row| row.chars().count()).max().unwrap_or(width);
 
         let mut lines = Vec::new();
         if area.height >= HEIGHT + EEPY_ROWS {
@@ -483,13 +535,13 @@ impl Component for Debbie {
         // Pad against the tallest frame, so even a shorter pose clears the rows a previous
         // taller frame wrote
         for _ in body.len()..HEIGHT as usize {
-            lines.push(Line::raw(" ".repeat(WIDTH)));
+            lines.push(Line::raw(" ".repeat(width)));
         }
 
         let last = body.len() - 1;
         for (i, row) in body.into_iter().enumerate() {
             let row = format!("{}{row}", " ".repeat(body_pad));
-            let row = format!("{row:<WIDTH$}");
+            let row = format!("{row:<width$}");
             lines.push(if i == last {
                 Self::border_row(row)
             } else {
@@ -499,9 +551,9 @@ impl Component for Debbie {
 
         let height = lines.len() as u16;
         let corner = Rect {
-            x: area.right().saturating_sub(WIDTH as u16 + 1),
+            x: area.right().saturating_sub(WIDTH + 1),
             y: area.bottom().saturating_sub(height),
-            width: WIDTH as u16,
+            width: WIDTH,
             height,
         };
 

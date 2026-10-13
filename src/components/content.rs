@@ -363,4 +363,3 @@ mod truncate_tests {
         assert_eq!(truncate("anything", 1), "…");
     }
 }
-
