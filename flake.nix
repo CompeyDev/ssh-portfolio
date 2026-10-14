@@ -38,7 +38,7 @@
         lib = pkgs.lib;
         craneLib = (crane.mkLib pkgs).overrideToolchain (
           toolchain:
-          toolchain.rust-bin.nightly."2025-06-20".default.override {
+          toolchain.rust-bin.nightly."2026-08-14".default.override {
             targets = [ targetTriple ];
             extensions = [
               "clippy"
