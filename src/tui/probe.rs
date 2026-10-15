@@ -254,10 +254,8 @@ impl Probe {
             },
 
             // Fence: every earlier query has been answered or ignored by now
-            b'n' => {
-                if text == "0" {
-                    self.fenced = true;
-                }
+            b'n' if text == "0" => {
+                self.fenced = true;
             }
 
             _ => {}
