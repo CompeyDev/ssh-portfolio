@@ -109,11 +109,7 @@ impl Boot {
         username: Arc<RwLock<Option<String>>>,
         client_ip: Option<IpAddr>,
     ) -> Self {
-        Self {
-            terminal_info,
-            username,
-            greeting: greeting::word(client_ip).unwrap_or(DEFAULT_GREETING),
-        }
+        Self { terminal_info, username, greeting: greeting::word(client_ip) }
     }
 
     pub fn draw(&self, frame: &mut Frame, area: Rect, t: f32) {
@@ -236,7 +232,7 @@ impl Greeting {
         }
 
         let name = name?;
-        let text = format!("{greeting}, {}!", truncate(&name, 24));
+        let text = greeting.replacen("{user}", &truncate(&name, 24), 1);
         let count = text.chars().count() as f32;
         let typed = ((t - T_GREET) / (T_TYPED - T_GREET)).clamp(0.0, 1.0);
 
@@ -305,31 +301,81 @@ impl Log<'_, '_> {
     }
 }
 
-pub const DEFAULT_GREETING: &str = "welcome";
-
 #[cfg(feature = "localtime")]
 mod greeting {
     use std::net::IpAddr;
     use std::sync::LazyLock;
 
     use iptz::Table;
+    use jiff::civil::Weekday;
     use jiff::tz::TimeZone;
     use jiff::Zoned;
 
     const IPTZ_DB: &[u8] = include_bytes!("../../assets/iptz.bin");
     static TABLE: LazyLock<Option<Table>> = LazyLock::new(|| Table::decode(IPTZ_DB).ok());
 
-    pub fn word(ip: Option<IpAddr>) -> Option<&'static str> {
+    struct Entry {
+        spicy: bool,
+        when: fn(&Zoned) -> bool,
+        text: &'static str,
+    }
+
+    #[rustfmt::skip]
+    const GREETINGS: &[Entry] = &[
+        // morning
+        Entry { spicy: false, when: |z| (5..=11).contains(&z.hour()), text: "good morning, {user}!" },
+        Entry { spicy: false, when: |z| (5..=11).contains(&z.hour()), text: "top of the morning, {user}!" },
+        Entry { spicy: false, when: |z| (5..=11).contains(&z.hour()), text: "morning, {user}!" },
+        Entry { spicy: false, when: |z| (5..=9).contains(&z.hour()), text: "coffee first, {user}!" },
+        Entry { spicy: false, when: |z| (5..=8).contains(&z.hour()), text: "up and at 'em, {user}!" },
+        Entry { spicy: false, when: |z| (5..=6).contains(&z.hour()), text: "you're up early, {user}?" },
+
+        // afternoon
+        Entry { spicy: false, when: |z| (12..=16).contains(&z.hour()), text: "good afternoon, {user}!" },
+        Entry { spicy: false, when: |z| (12..=16).contains(&z.hour()), text: "afternoon, {user}!" },
+        Entry { spicy: false, when: |z| z.hour() == 12, text: "high noon, {user}." },
+        Entry { spicy: false, when: |z| (13..=16).contains(&z.hour()), text: "back at it, {user}!" },
+        Entry { spicy: false, when: |z| (14..=16).contains(&z.hour()), text: "afternoon slump, {user}?" },
+        Entry { spicy: false, when: |z| (15..=16).contains(&z.hour()), text: "still at it, {user}?" },
+
+        // evening
+        Entry { spicy: false, when: |z| (17..=21).contains(&z.hour()), text: "good evening, {user}!" },
+        Entry { spicy: false, when: |z| (17..=21).contains(&z.hour()), text: "evening, {user}!" },
+        Entry { spicy: false, when: |z| (17..=18).contains(&z.hour()), text: "clocking off, {user}!" },
+        Entry { spicy: false, when: |z| (18..=21).contains(&z.hour()), text: "long day, {user}?" },
+        Entry { spicy: false, when: |z| (18..=21).contains(&z.hour()), text: "done for the day, {user}?" },
+        Entry { spicy: false, when: |z| (19..=21).contains(&z.hour()), text: "winding down, {user}!" },
+
+        // night
+        Entry { spicy: false, when: |z| matches!(z.hour(), 22..=23 | 0..=4), text: "night owl, {user}!" },
+        Entry { spicy: false, when: |z| matches!(z.hour(), 23 | 0..=4), text: "still up, {user}?" },
+        Entry { spicy: false, when: |z| matches!(z.hour(), 0..=3), text: "burning the midnight oil, {user}?" },
+        Entry { spicy: false, when: |z| matches!(z.hour(), 1..=4), text: "can't sleep either, {user}?" },
+        Entry { spicy: false, when: |z| matches!(z.hour(), 1..=4), text: "shouldn't you be asleep, {user}?" },
+
+        // easter eggs (higher priority)
+        Entry { spicy: true, when: |z| z.hour() == 0, text: "the witching hour, {user}." },
+        Entry { spicy: true, when: |z| z.hour() == 3, text: "it's 3am, {user}. you good?" },
+        Entry { spicy: true, when: |z| z.weekday() == Weekday::Friday && z.hour() >= 17, text: "it's friday, {user}. go touch grass." },
+    ];
+
+    pub fn word(ip: Option<IpAddr>) -> &'static str {
+        resolve(ip).unwrap_or_else(super::variation::fallback)
+    }
+
+    fn resolve(ip: Option<IpAddr>) -> Option<&'static str> {
         let Some(IpAddr::V4(v4)) = ip else { return None };
         let zone = TABLE.as_ref()?.lookup(v4)?;
         let tz = TimeZone::get(zone).ok()?;
+        let now = Zoned::now().with_time_zone(tz);
 
-        Some(match Zoned::now().with_time_zone(tz).hour() {
-            5..=11 => "good morning",
-            12..=16 => "good afternoon",
-            17..=21 => "good evening",
-            _ => "good night",
-        })
+        // Prefer easter eggs, if any
+        let candidates = GREETINGS.iter().filter(|g| (g.when)(&now));
+        let use_specials = candidates.clone().any(|g| g.spicy);
+        let texts =
+            candidates.filter(|g| g.spicy == use_specials).map(|g| g.text).collect::<Vec<_>>();
+
+        super::variation::pick(&texts)
     }
 }
 
@@ -337,7 +383,52 @@ mod greeting {
 mod greeting {
     use std::net::IpAddr;
 
-    pub fn word(_ip: Option<IpAddr>) -> Option<&'static str> {
-        Some(super::DEFAULT_GREETING)
+    pub fn word(_ip: Option<IpAddr>) -> &'static str {
+        super::variation::fallback()
+    }
+}
+
+pub(super) mod variation {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use rand::seq::IndexedRandom;
+
+    // Prevent a greeting being repeated multiple times across visits. Since all our greetings
+    // are 'static strings, we can simply track by pointer identity to prevent an additional
+    // allocation
+    static LAST: AtomicUsize = AtomicUsize::new(0);
+
+    /// Picks a random entry from `options`, preventing a repeated value across invocations
+    pub(super) fn pick(options: &[&'static str]) -> Option<&'static str> {
+        let last = LAST.load(Ordering::Relaxed);
+        let fresh = options
+            .iter()
+            .copied()
+            .filter(|s| s.as_ptr() as usize != last)
+            .collect::<Vec<&'static str>>();
+
+        let chosen = fresh
+            .choose(&mut rand::rng())
+            .or_else(|| options.choose(&mut rand::rng()))
+            .copied();
+
+        if let Some(c) = chosen {
+            LAST.store(c.as_ptr() as usize, Ordering::Relaxed);
+        }
+
+        chosen
+    }
+
+    /// Pick a random non customized greeting
+    pub(super) fn fallback() -> &'static str {
+        pick(&[
+            "welcome, {}!",
+            "hiya, {}!",
+            "hey there, {}!",
+            "good to see you, {}!",
+            "howdy, {}!",
+            "well met, {}!",
+        ])
+        .unwrap() // NOTE: safe to unwrap since never None, always a populated array
     }
 }
