@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::sync::Arc;
 
 use ratatui::prelude::*;
@@ -25,7 +26,7 @@ const FADE_START: f32 = 4.60;
 /// How long the whole boot runs before handing off to the TUI.
 pub const BOOT_TOTAL: f32 = 4.90;
 
-// Once the greeting is fully typed out, how long it should pulse and between what 
+// Once the greeting is fully typed out, how long it should pulse and between what
 // minimum value for the brightness
 const SHIMMER_FLOOR: f32 = 0.78;
 const SHIMMER_SPEED: f32 = 4.5;
@@ -67,7 +68,7 @@ impl Wake {
 }
 
 /// Describes the appearance (pose, eyes, muzzle and z's) for an instant in time from the
-/// start of the timer, in seconds 
+/// start of the timer, in seconds
 struct Keyframe {
     until: f32,
     pose: Wake,
@@ -99,14 +100,20 @@ fn cat_pose(t: f32) -> (Vec<String>, bool) {
 pub struct Boot {
     terminal_info: Arc<RwLock<TerminalInfo>>,
     username: Arc<RwLock<Option<String>>>,
+    greeting: &'static str,
 }
 
 impl Boot {
     pub fn new(
         terminal_info: Arc<RwLock<TerminalInfo>>,
         username: Arc<RwLock<Option<String>>>,
+        client_ip: Option<IpAddr>,
     ) -> Self {
-        Self { terminal_info, username }
+        Self {
+            terminal_info,
+            username,
+            greeting: greeting::word(client_ip).unwrap_or(DEFAULT_GREETING),
+        }
     }
 
     pub fn draw(&self, frame: &mut Frame, area: Rect, t: f32) {
@@ -198,7 +205,7 @@ impl Boot {
 
         // Greet the user by their SSH username
         let name = self.username.try_read().ok().and_then(|g| g.clone());
-        if let Some(greeting) = Greeting::at(t, name) {
+        if let Some(greeting) = Greeting::at(t, self.greeting, name) {
             greeting.draw(frame, cx, greet_row, fade);
         }
 
@@ -223,13 +230,13 @@ struct Greeting {
 
 impl Greeting {
     /// The state of the greeting to be displayed at `t`, or `None` if no username was provided
-    fn at(t: f32, name: Option<String>) -> Option<Self> {
+    fn at(t: f32, greeting: &str, name: Option<String>) -> Option<Self> {
         if t < T_GREET {
             return None;
         }
 
         let name = name?;
-        let text = format!("hiya, {}!", truncate(&name, 24));
+        let text = format!("{greeting}, {}!", truncate(&name, 24));
         let count = text.chars().count() as f32;
         let typed = ((t - T_GREET) / (T_TYPED - T_GREET)).clamp(0.0, 1.0);
 
@@ -295,5 +302,42 @@ impl Log<'_, '_> {
         }
 
         self.frame.buffer_mut().set_string(x + 6, y, label, style(GRAY, fade, false));
+    }
+}
+
+pub const DEFAULT_GREETING: &str = "welcome";
+
+#[cfg(feature = "localtime")]
+mod greeting {
+    use std::net::IpAddr;
+    use std::sync::LazyLock;
+
+    use iptz::Table;
+    use jiff::tz::TimeZone;
+    use jiff::Zoned;
+
+    const IPTZ_DB: &[u8] = include_bytes!("../../assets/iptz.bin");
+    static TABLE: LazyLock<Option<Table>> = LazyLock::new(|| Table::decode(IPTZ_DB).ok());
+
+    pub fn word(ip: Option<IpAddr>) -> Option<&'static str> {
+        let Some(IpAddr::V4(v4)) = ip else { return None };
+        let zone = TABLE.as_ref()?.lookup(v4)?;
+        let tz = TimeZone::get(zone).ok()?;
+
+        Some(match Zoned::now().with_time_zone(tz).hour() {
+            5..=11 => "good morning",
+            12..=16 => "good afternoon",
+            17..=21 => "good evening",
+            _ => "good night",
+        })
+    }
+}
+
+#[cfg(not(feature = "localtime"))]
+mod greeting {
+    use std::net::IpAddr;
+
+    pub fn word(_ip: Option<IpAddr>) -> Option<&'static str> {
+        Some(super::DEFAULT_GREETING)
     }
 }

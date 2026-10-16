@@ -1,0 +1,31 @@
+[package]
+name = "iptz"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+license-file = "../LICENSE"
+publish = false
+
+[[bin]]
+name = "iptz-gen"
+path = "src/main.rs"
+required-features = ["generate"]
+
+[features]
+default = ["codec"]
+serde = ["dep:serde"]
+codec = ["serde", "dep:postcard", "dep:flate2", "dep:thiserror"]
+generate = ["codec", "dep:tzf-rs", "dep:csv", "dep:anyhow", "dep:pico-args"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+postcard = { version = "1", features = ["use-std"], optional = true }
+flate2 = { version = "1.1", optional = true }
+thiserror = { version = "2", optional = true }
+
+# iptz-gen dependencies 
+anyhow = { version = "1", optional = true }
+csv = { version = "1.4", optional = true }
+pico-args = { version = "0.5", optional = true }
+tzf-rs = { version = "2.1", optional = true }
+

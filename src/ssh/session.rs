@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,7 +35,7 @@ pub struct SshSession {
 }
 
 impl SshSession {
-    pub fn new() -> Self {
+    pub fn new(peer_ip: Option<IpAddr>) -> Self {
         let (keystroke_tx, keystroke_rx) = mpsc::channel(KEYSTROKE_CHANNEL_CAP);
         let (geometry_tx, geometry_rx) = watch::channel(TerminalGeometry::default());
 
@@ -47,6 +48,7 @@ impl SshSession {
             app: App::new(
                 term_info,
                 username,
+                peer_ip,
                 OPTIONS.tick_rate,
                 OPTIONS.frame_rate,
                 keystroke_rx,

@@ -1,4 +1,5 @@
 use std::io::{Error, ErrorKind};
+use std::net::IpAddr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Instant;
@@ -90,13 +91,14 @@ impl App {
     pub fn new(
         terminal_info: Arc<RwLock<TerminalInfo>>,
         username: Arc<RwLock<Option<String>>>,
+        client_ip: Option<IpAddr>,
         tick_rate: f64,
         frame_rate: f64,
         keystroke_rx: mpsc::Receiver<Vec<u8>>,
         geometry_rx: watch::Receiver<TerminalGeometry>,
     ) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel();
-        let boot = Boot::new(Arc::clone(&terminal_info), username);
+        let boot = Boot::new(Arc::clone(&terminal_info), username, client_ip);
 
         // Initialize components
         let active_tab = Arc::new(AtomicUsize::new(0));

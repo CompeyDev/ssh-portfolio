@@ -43,6 +43,15 @@ blog = [
     "dep:atrium-codegen",
 ]
 
+# Personalized welcome greeting based on time of day by IP matching. No IP is
+# transmitted to a third-party service. Simply a local lookup.
+localtime = ["dep:jiff", "iptz/codec"]
+
+[workspace]
+resolver = "3"
+members = ["crates/iptz"]
+default-members = ["."]
+
 [dependencies]
 anyhow = "1.0.90"
 atrium-api = { version = "0.25.4", optional = true }
@@ -72,6 +81,8 @@ human-panic = "2.0.2"
 image = { version = "0.25.6", features = ["jpeg", "png", "webp"], default-features = false, optional = true }
 indoc = "2.0.5"
 ipld-core = { version = "0.4.2", optional = true }
+iptz = { path = "crates/iptz", optional = true }
+jiff = { version = "0.2.38", optional = true, features = ["tzdb-bundle-always"] }
 json5 = "0.4.1"
 lazy_static = "1.5.0"
 libc = "0.2.161"

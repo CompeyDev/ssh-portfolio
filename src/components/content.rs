@@ -140,8 +140,15 @@ impl Content {
         ));
         lines
             .push(Line::styled(format!("  agpl-3.0 · {}", env!("CARGO_PKG_REPOSITORY")), dim));
+        
+        // DB-IP City Lite requires attribution
+        #[cfg(feature = "localtime")]
+        lines.push(Line::styled(
+            "  offline ip geolocation from db-ip · cc by 4.0 · db-ip.com",
+            dim,
+        ));
+        
         lines.push(Line::default());
-
         lines.push(Line::styled("  (availability)", dim));
         lines.extend(vec![
             Line::from(

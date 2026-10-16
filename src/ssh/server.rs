@@ -57,7 +57,8 @@ impl Server for SshServer {
 
     #[instrument(skip(self))]
     fn new_client(&mut self, peer_addr: Option<SocketAddr>) -> Self::Handler {
-        tokio::task::block_in_place(SshSession::new)
+        let peer_ip = peer_addr.map(|addr| addr.ip());
+        tokio::task::block_in_place(|| SshSession::new(peer_ip))
     }
 }
 
