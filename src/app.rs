@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Instant;
 
+use cfg_if::cfg_if;
 use color_eyre::{eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Alignment, Constraint, Layout, Margin, Rect};
@@ -322,10 +323,14 @@ impl App {
                 // *before* the broadcast. Let's wait for the busy components to finish before
                 // actually propagating the signal to quit the session
                 Action::Quit => {
-                    #[cfg(feature = "blog")]
-                    let nested = self.blog_posts.try_lock().map_or(true, |c| c.is_in_post());
-                    #[cfg(not(feature = "blog"))]
-                    let nested = false;
+                    cfg_if! {
+                        if #[cfg(feature = "blog")] {
+                            let nested =
+                                self.blog_posts.try_lock().map_or(true, |c| c.is_in_post());
+                        } else {
+                            let nested = false;
+                        }
+                    }
 
                     let help_visible = self.help.try_lock().map_or(true, |c| c.is_visible());
                     let credits_visible =
@@ -537,25 +542,23 @@ impl App {
             }
 
             if current_tab == Tabs::BLOG {
-                #[cfg(feature = "blog")]
-                {
-                    // Render the post selection list if the blog tab is selected
-                    self.blog_posts
-                        .try_lock()
-                        .map_err(|_| Error::from(FRAME_BUSY))?
-                        .draw(frame, content_area)
-                        .map_err(Error::other)?;
-                }
+                cfg_if! {
+                    if #[cfg(feature = "blog")] {
+                        // Render the post selection list if the blog tab is selected
+                        self.blog_posts
+                            .try_lock()
+                            .map_err(|_| Error::from(FRAME_BUSY))?
+                            .draw(frame, content_area)
+                            .map_err(Error::other)?;
+                    } else {
+                        let placeholder = Paragraph::new(
+                            "blog feature is disabled. enable the `blog` feature to view this \
+                             tab.",
+                        )
+                        .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
 
-                #[cfg(not(feature = "blog"))]
-                {
-                    let placeholder = Paragraph::new(
-                        "blog feature is disabled. enable the `blog` feature to view this \
-                         tab.",
-                    )
-                    .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
-
-                    frame.render_widget(placeholder, Rect { height: 1, ..content_area });
+                        frame.render_widget(placeholder, Rect { height: 1, ..content_area });
+                    }
                 }
             } else {
                 self.content

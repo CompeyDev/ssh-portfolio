@@ -169,11 +169,7 @@ mod tests {
 
     #[test]
     fn round_trips_and_looks_up() {
-        let names = vec![
-            String::new(),
-            "Asia/Tokyo".to_string(),
-            "Etc/GMT".to_string(),
-        ];
+        let names = vec![String::new(), "Asia/Tokyo".to_string(), "Etc/GMT".to_string()];
 
         let ranges = vec![
             (0, 0),   // 0.0.0.0 = unknown

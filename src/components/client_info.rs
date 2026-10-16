@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use cfg_if::cfg_if;
 use color_eyre::Result;
 use ratatui::layout::Size;
 use ratatui::prelude::*;
@@ -87,25 +88,25 @@ impl ClientInfo {
 
     /// Describe the image protocol in use for this client.
     fn image_label(&self) -> String {
-        #[cfg(feature = "blog")]
-        {
-            let Some(info) = self.terminal_info.as_ref().and_then(|i| i.try_read().ok())
-            else {
-                return "...".to_string();
-            };
+        cfg_if! {
+            if #[cfg(feature = "blog")] {
+                let Some(info) = self.terminal_info.as_ref().and_then(|i| i.try_read().ok())
+                else {
+                    return "...".to_string();
+                };
 
-            if !info.supports_images() {
-                return "none".to_string();
-            }
+                if !info.supports_images() {
+                    return "none".to_string();
+                }
 
-            match info.protocol() {
-                ProtocolType::Halfblocks => "blocks".to_string(),
-                other => format!("{other:?}").to_lowercase(),
+                match info.protocol() {
+                    ProtocolType::Halfblocks => "blocks".to_string(),
+                    other => format!("{other:?}").to_lowercase(),
+                }
+            } else {
+                "disabled".to_string()
             }
         }
-
-        #[cfg(not(feature = "blog"))]
-        "disabled".to_string()
     }
 
     fn rows(&self, term_size: Size) -> Vec<Line<'static>> {

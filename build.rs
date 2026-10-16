@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     atrium_codegen::genapi(
         ATPROTO_LEXICON_DIR,
         ATPROTO_CLIENT_DIR,
-        &[("com.whtwnd", Some("blog"))]
+        &[("com.whtwnd", Some("blog"))],
     )
     .unwrap();
 
@@ -52,7 +52,10 @@ fn main() -> Result<()> {
     );
 
     // Emit the total LoC of Rust
-    println!("cargo:rustc-env=PKG_LOC={}", count_lines(Path::new("src"))? + count_lines(Path::new("crates"))?);
+    println!(
+        "cargo:rustc-env=PKG_LOC={}",
+        count_lines(Path::new("src"))? + count_lines(Path::new("crates"))?
+    );
 
     Ok(())
 }
@@ -81,7 +84,7 @@ fn count_lines(dir: &Path) -> Result<usize> {
 }
 
 /// Generates a JSON file containing credits for all libraries depended upon by the project
-/// using `cargo-about`. 
+/// using `cargo-about`.
 #[cfg(feature = "credits")]
 fn gen_credits() -> Result<()> {
     use serde_json::Value;
@@ -92,12 +95,14 @@ fn gen_credits() -> Result<()> {
     println!("cargo:rerun-if-changed=.cargo/about-credits.hbs");
 
     let out_dir = env::var("OUT_DIR").context("OUT_DIR not set")?;
-    
+
     let sh = Shell::new()?;
-    let stdout =
-        cmd!(sh, "cargo about generate .cargo/about-credits.hbs --offline --features localtime")
-            .read()
-            .context("credits requires `cargo-about`")?;
+    let stdout = cmd!(
+        sh,
+        "cargo about generate .cargo/about-credits.hbs --offline --features localtime"
+    )
+    .read()
+    .context("credits requires `cargo-about`")?;
 
     // Validate produced JSON
     serde_json::from_str::<Value>(&stdout).context("invalid JSON produced")?;
@@ -106,4 +111,3 @@ fn gen_credits() -> Result<()> {
     fs::write(&path, &stdout).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
 }
-

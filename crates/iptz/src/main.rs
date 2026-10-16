@@ -100,7 +100,7 @@ impl ZoneResolver {
     }
 
     fn parse_row(&mut self, record: &StringRecord) -> Option<(u32, u16)> {
-        let ip = record.get(COL_IP_START)?.parse::<Ipv4Addr>().ok()?    ; // reject IPv6
+        let ip = record.get(COL_IP_START)?.parse::<Ipv4Addr>().ok()?; // reject IPv6
         let (lat, lon) = (record.get(COL_LAT)?, record.get(COL_LON)?);
 
         let zone = match (lat.parse::<f64>(), lon.parse::<f64>()) {
