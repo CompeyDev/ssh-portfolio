@@ -422,12 +422,12 @@ pub(super) mod variation {
     /// Pick a random non customized greeting
     pub(super) fn fallback() -> &'static str {
         pick(&[
-            "welcome, {}!",
-            "hiya, {}!",
-            "hey there, {}!",
-            "good to see you, {}!",
-            "howdy, {}!",
-            "well met, {}!",
+            "welcome, {name}!",
+            "hiya, {name}!",
+            "hey there, {name}!",
+            "good to see you, {name}!",
+            "howdy, {name}!",
+            "well met, {name}!",
         ])
         .unwrap() // NOTE: safe to unwrap since never None, always a populated array
     }
