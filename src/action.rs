@@ -16,6 +16,7 @@ pub enum Action {
     ClearScreen,
     Error(String),
     Help,
+    Credits,
 
     // Tab management
     NextTab,
@@ -58,6 +59,7 @@ impl<'de> Deserialize<'de> for Action {
                         Quit,
                         ClearScreen,
                         Help,
+                        Credits,
                         NextTab,
                         PrevTab,
                         SelectNext,
@@ -74,6 +76,7 @@ impl<'de> Deserialize<'de> for Action {
                         Helper::Quit => Action::Quit,
                         Helper::ClearScreen => Action::ClearScreen,
                         Helper::Help => Action::Help,
+                        Helper::Credits => Action::Credits,
                         Helper::NextTab => Action::NextTab,
                         Helper::PrevTab => Action::PrevTab,
                         Helper::SelectNext => Action::SelectNext,

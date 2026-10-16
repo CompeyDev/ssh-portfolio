@@ -55,6 +55,7 @@ pub struct App {
     footer: Arc<Mutex<Footer>>,
     client_info: Arc<Mutex<ClientInfo>>,
     help: Arc<Mutex<Help>>,
+    credits: Arc<Mutex<Credits>>,
 }
 
 pub const TABS: [&str; 3] = ["about", "projects", "blog"];
@@ -117,6 +118,7 @@ impl App {
         let footer = Arc::new(Mutex::new(Footer::new(active_tab)));
         let client_info = Arc::new(Mutex::new(ClientInfo::new()));
         let help = Arc::new(Mutex::new(Help::new()));
+        let credits = Arc::new(Mutex::new(Credits::new()));
 
         Ok(Self {
             terminal_info,
@@ -146,6 +148,7 @@ impl App {
             footer,
             client_info,
             help,
+            credits,
         })
     }
 
@@ -274,6 +277,13 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
+        if let Ok(mut credits) = self.credits.try_lock() {
+            // If the credits view is active, it should capture all regular navigation keys
+            if credits.is_visible() && credits.handle_key(key) {
+                return Ok(());
+            }
+        }
+
         let action_tx = self.action_tx.clone();
         let Some(keymap) = self.config.keybindings.get(&self.mode) else {
             return Ok(());
@@ -318,7 +328,9 @@ impl App {
                     let nested = false;
 
                     let help_visible = self.help.try_lock().map_or(true, |c| c.is_visible());
-                    self.should_quit = !nested && !help_visible;
+                    let credits_visible =
+                        self.credits.try_lock().map_or(true, |c| c.is_visible());
+                    self.should_quit = !nested && !help_visible && !credits_visible;
                 }
                 Action::Suspend => self.should_suspend = true,
                 Action::Resume => self.should_suspend = false,
@@ -366,6 +378,10 @@ impl App {
             }
 
             if let Some(action) = try_component(&self.help, |c| c.update(action.clone()))? {
+                self.action_tx.send(action)?;
+            }
+
+            if let Some(action) = try_component(&self.credits, |c| c.update(action.clone()))? {
                 self.action_tx.send(action)?;
             }
         }
@@ -565,6 +581,13 @@ impl App {
 
             // The help overlay sits above everything else
             self.help
+                .try_lock()
+                .map_err(|_| Error::from(FRAME_BUSY))?
+                .draw(frame, full)
+                .map_err(Error::other)?;
+
+            // The credits overlay sits above even the help overlay
+            self.credits
                 .try_lock()
                 .map_err(|_| Error::from(FRAME_BUSY))?
                 .draw(frame, full)

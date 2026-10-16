@@ -23,6 +23,7 @@ mod cat;
 mod chrome;
 mod client_info;
 mod content;
+mod credits;
 mod footer;
 mod help;
 #[cfg(feature = "blog")]
@@ -37,6 +38,7 @@ pub use cat::*;
 pub use chrome::*;
 pub use client_info::*;
 pub use content::*;
+pub use credits::*;
 pub use footer::*;
 pub use help::*;
 #[cfg(feature = "blog")]

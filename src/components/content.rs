@@ -163,6 +163,31 @@ impl Content {
             Style::default().fg(Color::LightMagenta),
         ));
 
+        lines.push(Line::default());
+        lines.push(Self::heading("credits", width));
+
+        let assets = super::credits::ASSETS.iter().map(|a| (a.name, a.source, a.license));
+        let asset_col =
+            assets.clone().map(|(name, ..)| name.chars().count()).max().unwrap_or(0);
+
+        for (name, source, license) in assets {
+            let pad = " ".repeat(asset_col.saturating_sub(name.chars().count()));
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {name}"), body),
+                Span::styled(format!("{pad}   {source} · {license}"), dim),
+            ]));
+        }
+
+        let crates = super::Credits::crate_count();
+        if crates > 0 {
+            lines.push(Line::styled(format!("  + {crates} open-source crates"), dim));
+        }
+
+        lines.push(Line::styled(
+            "  press c to browse credits & licenses",
+            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+        ));
+
         lines
     }
 
