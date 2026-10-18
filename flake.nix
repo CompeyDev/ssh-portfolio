@@ -150,7 +150,12 @@
             }
           );
 
-        ssh-portfolio = pkgs.callPackage crate { };
+        ssh-portfolio = pkgs.callPackage crate {
+          features = [
+            "localtime"
+            "credits"
+          ];
+        };
         ssh-portfolio-deny = craneLib.cargoDeny (
           commonCraneArgs
           // {

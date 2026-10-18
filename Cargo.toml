@@ -25,7 +25,7 @@ opt-level = 2               # Optimize more than default, see https://github.com
 incremental = true          # Improves re-compile times
 
 [features]
-default = ["blog"]
+default = ["localtime", "credits"]
 blog = [
     # Main deps
     "dep:atrium-api",
