@@ -82,8 +82,6 @@
               (lib.fileset.fromSource ./assets)
               (lib.fileset.fromSource ./src/atproto/lexicons)
               ./.cargo/about-credits.hbs
-              # TODO: just get rid of the include_str!
-              ./crates/iptz/README.md
             ]);
           };
           strictDeps = true;

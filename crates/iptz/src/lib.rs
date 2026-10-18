@@ -1,5 +1,3 @@
-#![doc = include_str!("../README.md")]
-
 use std::net::Ipv4Addr;
 
 /// The primary data structure. A map of IPv4 addresses to IANA timezones.
