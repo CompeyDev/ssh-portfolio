@@ -81,6 +81,10 @@
               (lib.fileset.fromSource ./.config)
               (lib.fileset.fromSource ./assets)
               (lib.fileset.fromSource ./src/atproto/lexicons)
+              ./about.toml
+              ./.cargo/about-credits.hbs
+              # TODO: just get rid of the include_str!
+              ./crates/iptz/README.md
             ]);
           };
           strictDeps = true;
@@ -109,6 +113,12 @@
             // {
               inherit cargoArtifacts;
               doCheck = false;
+              
+              # Install `cargo-about` when the credits feature is on
+              nativeBuildInputs =
+                commonCraneArgs.nativeBuildInputs
+                ++ lib.optional (builtins.elem "credits" features) pkgs.cargo-about;
+              
               cargoExtraArgs = "--locked --no-default-features ${
                 lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
               }";
