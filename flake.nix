@@ -81,7 +81,6 @@
               (lib.fileset.fromSource ./.config)
               (lib.fileset.fromSource ./assets)
               (lib.fileset.fromSource ./src/atproto/lexicons)
-              ./about.toml
               ./.cargo/about-credits.hbs
               # TODO: just get rid of the include_str!
               ./crates/iptz/README.md
