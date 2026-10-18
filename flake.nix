@@ -97,18 +97,25 @@
           hardeningDisable = [ "fortify" ]; # MUSL does not implementation fortification checks
         };
 
-        # Build dependencies separately to have them cached in nix store
-        cargoArtifacts = craneLib.buildDepsOnly commonCraneArgs;
-
         # Finally, compile the actual project
         crate =
           {
             features ? [ ],
           }:
+          let
+            cargoExtraArgs = "--locked --no-default-features ${
+              lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
+            }";
+
+            # Build dependencies separately so they're cached in the nix store. They must use
+            # the same feature flags as the package or else the cached artifacts will not match 
+            # and every build would recompile all of them
+            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // { inherit cargoExtraArgs; });
+          in
           craneLib.buildPackage (
             commonCraneArgs
             // {
-              inherit cargoArtifacts;
+              inherit cargoArtifacts cargoExtraArgs;
               doCheck = false;
               
               # Install `cargo-about` when the credits feature is on
@@ -116,9 +123,6 @@
                 commonCraneArgs.nativeBuildInputs
                 ++ lib.optional (builtins.elem "credits" features) pkgs.cargo-about;
               
-              cargoExtraArgs = "--locked --no-default-features ${
-                lib.optionalString (features != [ ]) ("--features " + lib.concatStringsSep "," features)
-              }";
               preBuild = ''
                 mkdir -p www/build
                 cp -r ${www}/* www/build
